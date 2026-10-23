@@ -38,6 +38,22 @@ try{
     while($script:PreviewJob -and -not $script:PreviewJob.Ready -and (Get-Date)-lt $deadline){Pump-Ui 100}
     Ui-Check 'PDF preview runs independently and reaches ready state' ($script:PreviewJob -and $script:PreviewJob.Ready -and $script:PreviewJob.Process.Id -ne $PID)
     Ui-Check 'Native preview is embedded in the right-hand pane' ($script:PreviewJob -and [Nailong.Native]::GetParent([IntPtr]$script:PreviewJob.Handle) -eq $previewHost.Handle)
+    # Opening a modal input must still work while a cross-process preview is embedded.
+    $dialogProbe=@{Deadline=(Get-Date).AddSeconds(5);Handled=$false}
+    $dialogTimer=New-Object Windows.Forms.Timer; $dialogTimer.Interval=200
+    $dialogTimer.Add_Tick({
+        $directoryDialog=@([Windows.Forms.Application]::OpenForms) | Where-Object {$_.Text -eq '奶龙.code · 管理目录与分类规则'} | Select-Object -First 1
+        if($directoryDialog -and -not $dialogProbe.Handled){
+            $dialogProbe.Handled=$true
+            $directoryInput=$directoryDialog.Controls[0].Controls | Where-Object {$_ -is [Windows.Forms.ComboBox]} | Select-Object -First 1
+            Ui-Check 'Directory dialog stays owned by the library with preview active' ($directoryDialog.Owner -eq $form)
+            Ui-Check 'Directory input gets focus while native preview is active' $directoryInput.ContainsFocus
+            $directoryDialog.CancelButton.PerformClick()
+        } elseif($directoryDialog -and (Get-Date) -gt $dialogProbe.Deadline){$directoryDialog.Close()}
+    }.GetNewClosure())
+    $dialogTimer.Start()
+    try{Show-DirectoryManager}finally{$dialogTimer.Stop();$dialogTimer.Dispose()}
+    Ui-Check 'Closing directory dialog restores the live preview and library' ($dialogProbe.Handled -and -not $script:UiUpdating -and $form.Enabled -and $script:PreviewJob.Ready)
     $before=$script:Heartbeats;Pump-Ui 400
     Ui-Check 'UI stays responsive with native PDF preview active' (($script:Heartbeats-$before) -ge 4)
     if($script:PreviewJob){$script:PreviewJob.Process.Kill();$null=$script:PreviewJob.Process.WaitForExit(1500)}

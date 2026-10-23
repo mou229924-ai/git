@@ -25,3 +25,6 @@
 /install-search-theme.ps1
 /_backups/
 /_upgrade-tests/
+/install-dialog-fix.ps1
+/dialog-baseline.json
+/dialog-installation.json

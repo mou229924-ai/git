@@ -303,7 +303,7 @@ function Show-SubjectDialog {
     $newPrompt = [string]$script:Cfg.popup.newSubjectPrompt
     $newTitle = [string]$script:Cfg.popup.title
     $btnNew.Add_Click({
-        $typed = Show-NameInput -Prompt $newPrompt -Title $newTitle
+        $typed = Show-NameInput -Prompt $newPrompt -Title $newTitle -Owner $state.Form
         if (-not [string]::IsNullOrWhiteSpace($typed)) {
             $state.Action = 'new'
             $state.Name = $typed

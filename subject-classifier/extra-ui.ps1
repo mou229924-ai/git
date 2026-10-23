@@ -25,7 +25,7 @@ function Rename-SelectedFile {
     if ($list.SelectedItems.Count -ne 1) { [void][Windows.Forms.MessageBox]::Show('请选择一个文件后重命名。','重命名'); return }
     Add-Type -AssemblyName Microsoft.VisualBasic
     $oldPath=[string]$list.SelectedItems[0].Tag
-    $name=Show-NameInput -Prompt '请输入新文件名（保留扩展名）：' -Title '重命名' -Default ([IO.Path]::GetFileName($oldPath))
+    $name=Show-NameInput -Prompt '请输入新文件名（保留扩展名）：' -Title '重命名' -Default ([IO.Path]::GetFileName($oldPath)) -Owner $form
     if ([string]::IsNullOrWhiteSpace($name)) { return }
     if ([IO.Path]::GetExtension($name) -ne [IO.Path]::GetExtension($oldPath)) {
         if ([Windows.Forms.MessageBox]::Show('扩展名将改变，文件可能无法正常打开。是否继续？','重命名','YesNo','Question') -ne 'Yes') { return }
@@ -47,7 +47,7 @@ function Show-DirectoryManager {
     $dialog=New-Object Windows.Forms.Form
     $dialog.Text='奶龙.code · 管理目录与分类规则'
     $dialog.Size=New-Object Drawing.Size((S 680),(S 410))
-    $dialog.StartPosition='CenterParent'; $dialog.Font=$form.Font; $dialog.BackColor=$script:ColBg
+    $dialog.StartPosition='CenterParent'; $dialog.FormBorderStyle='FixedDialog'; $dialog.MaximizeBox=$false; $dialog.MinimizeBox=$false; $dialog.Font=$form.Font; $dialog.BackColor=$script:ColBg
     $layout=New-Object Windows.Forms.TableLayoutPanel
     $layout.Dock='Fill'; $layout.ColumnCount=2; $layout.RowCount=5
     $layout.Padding=New-Object Windows.Forms.Padding((S 20))
@@ -76,15 +76,24 @@ function Show-DirectoryManager {
     }.GetNewClosure())
     $save=New-Object Windows.Forms.Button; $save.Text='保存目录与规则'; $save.AutoSize=$true
     $save.BackColor=$script:ColSurface
-    $layout.Controls.Add($save,1,4)
+    $cancel=New-Object Windows.Forms.Button; $cancel.Text='取消'; $cancel.AutoSize=$true; $cancel.DialogResult='Cancel'
+    $buttons=New-Object Windows.Forms.FlowLayoutPanel; $buttons.Dock='Fill'
+    $buttons.Controls.AddRange(@($save,$cancel)); $layout.Controls.Add($buttons,1,4)
+    $dialog.AcceptButton=$save; $dialog.CancelButton=$cancel
     $save.Add_Click({
         try {
             $null=Save-LibraryDirectory -Name $nameBox.Text -FilenameKeywords @($fileWords.Text -split '[,，;；\r\n]+' | ForEach-Object { $_.Trim() }) -ContentKeywords @($bodyWords.Text -split '[,，;；\r\n]+' | ForEach-Object { $_.Trim() })
+            $dialog.DialogResult='OK'
             $dialog.Close()
-        } catch { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'保存失败') }
+        } catch { [void][Windows.Forms.MessageBox]::Show($dialog,$_.Exception.Message,'保存失败') }
     }.GetNewClosure())
     Set-WarmControls $dialog
-    try { [void]$dialog.ShowDialog($form); Update-DirectoryChoices }
+    try {
+        if ((Show-LibraryDialog -Dialog $dialog -Owner $form -InitialFocus $nameBox) -eq 'OK') {
+            Update-DirectoryChoices
+            if (Get-Command Update-NavigationTree -ErrorAction SilentlyContinue) { Update-NavigationTree }
+        }
+    }
     finally { $dialog.Dispose(); $script:UiUpdating=$false }
 }
 

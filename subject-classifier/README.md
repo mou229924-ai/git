@@ -42,3 +42,5 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
 界面采用目录树、标准文件列表和可调整宽度的预览窗格。去重扫描、搜索和索引更新在后台独立运行；扫描可随时取消。预览组件也独立运行，退出或故障不会终止主窗口。
 
 `tests/background-tests.ps1` 和界面集成测试使用专门的隔离资料库，要求 `inbox` 指向程序目录中的 `test-library`，不可针对日常资料目录运行。预览测试还需要自行准备有效的 PDF：`test-library/物理/PDF预览测试.pdf`；界面响应测试需要 `test-library/物理/真实PDF预览测试.pdf`。这些资料文件不会随仓库分发。核心安全测试会自行生成测试数据。
+
+弹窗回归测试：在本目录运行 `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\dialog-tests.ps1`。测试会短暂显示隔离窗口，验证新建目录弹窗的归属、前台焦点、实际键盘输入、Enter 保存、Esc 取消和再次打开，不操作日常资料。

@@ -158,12 +158,42 @@ function Set-WarmControls {
     foreach ($child in $Control.Controls) { Set-WarmControls $child }
 }
 
+function Show-LibraryDialog {
+    param($Dialog,$Owner=$null,$InitialFocus=$null)
+    Add-Type -AssemblyName System.Windows.Forms
+    if (-not $Owner) { $Owner=[Windows.Forms.Form]::ActiveForm }
+    if ($Owner -and ($Owner.IsDisposed -or $Owner -eq $Dialog)) { $Owner=$null }
+    if ($Owner) {
+        $Dialog.Owner=$Owner
+        $Dialog.StartPosition='CenterParent'
+        $Dialog.ShowInTaskbar=$false
+        # Owned inputs must share the classifier's topmost band to remain reachable.
+        $Dialog.TopMost=$Owner.TopMost
+    }
+    $focusDialog=[Action]{
+        if ($Dialog.IsDisposed -or -not $Dialog.Visible) { return }
+        $Dialog.BringToFront()
+        $Dialog.Activate()
+        if ($InitialFocus -and $InitialFocus.CanFocus) {
+            $Dialog.ActiveControl=$InitialFocus
+            $InitialFocus.Select()
+            [void]$InitialFocus.Focus()
+        }
+    }.GetNewClosure()
+    $shown=[EventHandler]{ param($sender,$eventArgs) [void]$sender.BeginInvoke($focusDialog) }.GetNewClosure()
+    $Dialog.Add_Shown($shown)
+    try {
+        if ($Owner) { return $Dialog.ShowDialog($Owner) }
+        return $Dialog.ShowDialog()
+    } finally { $Dialog.Remove_Shown($shown) }
+}
+
 function Show-NameInput {
-    param([string]$Prompt,[string]$Title,[string]$Default='')
+    param([string]$Prompt,[string]$Title,[string]$Default='',$Owner=$null)
     Add-Type -AssemblyName System.Windows.Forms
     Add-Type -AssemblyName System.Drawing
     $dialog=New-Object Windows.Forms.Form
-    $dialog.Text=$Title; $dialog.StartPosition='CenterScreen'; $dialog.ClientSize=New-Object Drawing.Size((S 560),(S 190))
+    $dialog.Text=$Title; $dialog.StartPosition='CenterScreen'; $dialog.FormBorderStyle='FixedDialog'; $dialog.MaximizeBox=$false; $dialog.MinimizeBox=$false; $dialog.ClientSize=New-Object Drawing.Size((S 560),(S 190))
     $dialog.BackColor=[Drawing.Color]::FromArgb(255,248,226)
     $dialog.Font=New-Object Drawing.Font('Microsoft YaHei UI',10)
     $label=New-Object Windows.Forms.Label
@@ -176,5 +206,5 @@ function Show-NameInput {
     $cancel.Text='取消'; $cancel.DialogResult='Cancel'; $cancel.Location=New-Object Drawing.Point((S 445),(S 125)); $cancel.Size=$ok.Size
     $dialog.Controls.AddRange(@($label,$box,$ok,$cancel)); $dialog.AcceptButton=$ok; $dialog.CancelButton=$cancel
     Set-WarmControls $dialog
-    try { if ($dialog.ShowDialog() -eq 'OK') { return $box.Text }; return '' } finally { $dialog.Dispose() }
+    try { if ((Show-LibraryDialog -Dialog $dialog -Owner $Owner -InitialFocus $box) -eq 'OK') { return $box.Text }; return '' } finally { $dialog.Dispose() }
 }
