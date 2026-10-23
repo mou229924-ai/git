@@ -1,2 +1,26 @@
-# git
-Repository created via GitHub Copilot
+# 奶龙.code
+
+面向 Windows 的本地文件资料库，集中搜索、预览、分类和整理文档。暖黄色界面，目录和分类规则可以自定义。
+
+![奶龙.code](subject-classifier/assets/logo64.png)
+
+## 快速开始
+
+1. 下载本仓库并解压，进入 `subject-classifier` 文件夹。
+2. 复制 `config.example.json`，将副本命名为 `config.json`。
+3. 用文本编辑器修改 `config.json` 的 `inbox`，填写自己的资料目录绝对路径，例如 `D:/资料库`，保存为 UTF-8。
+4. 双击 `奶龙.code.vbs` 打开界面；双击 `启动监听.vbs` 开启后台自动分类。
+
+需要 Windows 10/11、Windows PowerShell 5.1 和系统自带的 .NET Framework。Office 文档原版式预览、打印依赖已安装的对应应用或系统预览组件。
+
+## 功能
+
+- 文件名和可提取正文搜索，可组合目录、格式、修改时间筛选。
+- 自定义目录和关键词分类；冲突时由用户选择。
+- 拖入文件移动并分类，拖出移动到桌面，快速重命名和批量打印。
+- 独立进程预览，支持系统预览器及 PDF、文本等备用预览。
+- 对字节内容完全一致的重复文档保留一份，其余可送回收站。删除入口需先通过本机安全测试，自动去重默认关闭。
+
+[完整使用与测试说明](subject-classifier/README.md)
+
+仓库包含源码、主题素材、配置示例和测试脚本。个人资料、本机配置、搜索索引、日志、备份和测试生成文件已排除。

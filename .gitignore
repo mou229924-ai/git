@@ -1,0 +1,49 @@
+# Operating system files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Local environment variables (keep examples)
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# Dependencies and Python environments
+node_modules/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Build output and tool caches
+/dist/
+/build/
+/out/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.next/
+
+# Test coverage
+/coverage/
+/htmlcov/
+.coverage
+.coverage.*
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Local IDE state
+.idea/
+.vs/
+*.suo
+*.user

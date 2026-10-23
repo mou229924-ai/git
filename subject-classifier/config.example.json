@@ -1,0 +1,322 @@
+{
+  "inbox": "D:/资料库",
+  "logFile": "_classifier.log",
+  "inspectReportFile": "_inspect.txt",
+  "pollSeconds": 2,
+  "stablePolls": 2,
+  "contentMaxChars": 60000,
+  "indexMaxChars": 120000,
+  "processExistingOnStartup": true,
+  "saveNewSubjects": true,
+  "otherFolderName": "其他",
+  "scoring": {
+    "nameWeight": 6,
+    "keywordWeight": 2,
+    "minScore": 8,
+    "dominance": 1.5
+  },
+  "subjects": [
+    {
+      "name": "语文",
+      "filenameKeywords": [
+        "语文",
+        "国语",
+        "汉语",
+        "文言文",
+        "作文",
+        "语",
+        "yuwen",
+        "chinese"
+      ],
+      "contentKeywords": [
+        "文言文",
+        "古诗词",
+        "默写",
+        "现代文阅读",
+        "说明文",
+        "议论文",
+        "记叙文",
+        "修辞手法"
+      ]
+    },
+    {
+      "name": "数学",
+      "filenameKeywords": [
+        "数学",
+        "代数",
+        "几何",
+        "函数",
+        "概率",
+        "数",
+        "math",
+        "maths",
+        "mathematics",
+        "shuxue"
+      ],
+      "contentKeywords": [
+        "函数",
+        "方程",
+        "不等式",
+        "三角形",
+        "数列",
+        "概率",
+        "导数",
+        "坐标系",
+        "二次函数",
+        "分式"
+      ]
+    },
+    {
+      "name": "英语",
+      "filenameKeywords": [
+        "英语",
+        "英文",
+        "英",
+        "english",
+        "yingyu"
+      ],
+      "contentKeywords": [
+        "单词",
+        "语法",
+        "完形填空",
+        "阅读理解",
+        "听力",
+        "句型",
+        "时态",
+        "音标"
+      ]
+    },
+    {
+      "name": "物理",
+      "filenameKeywords": [
+        "物理",
+        "力学",
+        "电磁学",
+        "光学",
+        "物",
+        "physics",
+        "wuli"
+      ],
+      "contentKeywords": [
+        "力学",
+        "电路",
+        "电流",
+        "电压",
+        "电阻",
+        "欧姆定律",
+        "浮力",
+        "压强",
+        "透镜",
+        "机械能",
+        "物态变化"
+      ]
+    },
+    {
+      "name": "化学",
+      "filenameKeywords": [
+        "化学",
+        "有机物",
+        "无机物",
+        "化",
+        "chemistry",
+        "huaxue"
+      ],
+      "contentKeywords": [
+        "溶液",
+        "溶质",
+        "溶剂",
+        "酸碱盐",
+        "中和反应",
+        "氧气",
+        "二氧化碳",
+        "元素",
+        "化合价",
+        "化学式",
+        "化学方程式"
+      ]
+    },
+    {
+      "name": "生物",
+      "filenameKeywords": [
+        "生物",
+        "细胞",
+        "遗传",
+        "生",
+        "biology",
+        "shengwu"
+      ],
+      "contentKeywords": [
+        "细胞",
+        "遗传",
+        "光合作用",
+        "呼吸作用",
+        "生态系统",
+        "染色体",
+        "基因"
+      ]
+    },
+    {
+      "name": "政治",
+      "filenameKeywords": [
+        "道德与法治",
+        "思想政治",
+        "政治",
+        "道法",
+        "政",
+        "politics",
+        "zhengzhi"
+      ],
+      "contentKeywords": [
+        "道德与法治",
+        "宪法",
+        "法律",
+        "法治",
+        "国情",
+        "公民",
+        "权利义务"
+      ]
+    },
+    {
+      "name": "历史",
+      "filenameKeywords": [
+        "中国史",
+        "世界史",
+        "历史",
+        "史",
+        "history",
+        "lishi"
+      ],
+      "contentKeywords": [
+        "朝代",
+        "鸦片战争",
+        "辛亥革命",
+        "抗日战争",
+        "改革开放",
+        "秦朝",
+        "唐朝"
+      ]
+    },
+    {
+      "name": "地理",
+      "filenameKeywords": [
+        "自然地理",
+        "人文地理",
+        "地理",
+        "地",
+        "geography",
+        "dili"
+      ],
+      "contentKeywords": [
+        "经纬度",
+        "气候",
+        "地形",
+        "板块",
+        "等高线",
+        "季风",
+        "洋流"
+      ]
+    },
+    {
+      "name": "信息技术",
+      "filenameKeywords": [
+        "信息技术",
+        "通用技术",
+        "计算机",
+        "编程",
+        "信息",
+        "informatics",
+        "computer",
+        "xinxi"
+      ],
+      "contentKeywords": [
+        "计算机",
+        "编程",
+        "算法",
+        "数据库",
+        "网络协议",
+        "软件",
+        "硬件"
+      ]
+    }
+  ],
+  "ignoreFiles": [
+    "classifier.ps1",
+    "config.json",
+    "start.vbs",
+    "stop.vbs",
+    "install-autostart.ps1",
+    "_classifier.log",
+    "_classifier.log.old",
+    "_selftest.txt",
+    "_inspect.txt",
+    "desktop.ini"
+  ],
+  "ignoreExtensions": [
+    ".tmp",
+    ".part",
+    ".crdownload",
+    ".partial",
+    ".download",
+    ".!ut"
+  ],
+  "popup": {
+    "title": "奶龙.code · 文件分类",
+    "prompt": "请选择这个文件所属的目录（文件夹不存在会自动创建）：",
+    "unknown": "没有找到明确的目录关键词，请手动选择：",
+    "ambiguous": "文件名或内容里同时出现了多个目录，无法确定，请手动选择：",
+    "candidatesLabel": "可能属于：",
+    "candidatesSeparator": "、",
+    "keep": "保持不动",
+    "other": "其他",
+    "newSubject": "新建目录…",
+    "newSubjectPrompt": "输入新的目录名称（会自动创建文件夹并记住）：",
+    "snippetLabel": "内容预览：",
+    "snippetEmpty": "（无法读取文字内容，只能根据文件名判断）"
+  },
+  "folder": {
+    "progress": "正在整理文件夹：{0} / {1}"
+  },
+  "tray": {
+    "text": "奶龙.code - 监听中",
+    "textPaused": "奶龙.code - 已暂停",
+    "title": "奶龙.code",
+    "started": "正在监听资料目录。双击托盘图标打开资料库，可拖入文件、搜索和预览。",
+    "alreadyRunning": "已经在后台运行。\n\n请查看任务栏右下角的托盘图标（可能被折叠在 ^ 里），右键可搜索、暂停或退出。",
+    "menuOpen": "打开分类文件夹",
+    "menuSearch": "打开资料库",
+    "menuLog": "打开日志",
+    "menuPause": "暂停监听",
+    "menuResume": "恢复监听",
+    "menuExit": "退出"
+  },
+  "search": {
+    "title": "奶龙.code",
+    "placeholder": "输入关键词，例如：中和反应 溶解度",
+    "subtitle": "在 {0} 个文件中搜索文件名和内容",
+    "queryLabel": "关键词（空格分隔多个词）：",
+    "search": "搜索",
+    "rebuild": "重建索引",
+    "openRoot": "打开分类文件夹",
+    "content": "搜索文件内容",
+    "allSubjects": "全部目录",
+    "unclassified": "根目录",
+    "colFile": "文件名",
+    "colSubject": "目录",
+    "colSize": "大小",
+    "colTime": "修改时间",
+    "colPath": "所在目录",
+    "colHit": "匹配内容",
+    "statLine": "索引 {0} 个文件，其中 {1} 个可搜索内容。",
+    "pdfNote": "Word 等支持正文搜索；PDF 可预览首页，扫描件暂不支持正文搜索。",
+    "found": "找到 {0} 个结果，用时 {1} ms。",
+    "noResult": "没有找到结果。",
+    "indexing": "正在重建索引：{0} / {1}",
+    "indexDone": "索引完成：{0} 个文件，其中 {1} 个可搜索内容。",
+    "rebuildConfirm": "确定要重建搜索索引吗？文件多时需要一点时间。",
+    "menuOpen": "打开文件",
+    "menuLocate": "打开所在文件夹",
+    "menuCopy": "复制路径",
+    "ready": "就绪",
+    "emptyIndex": "索引为空。"
+  }
+}

@@ -1,0 +1,27 @@
+/test-library/
+/test-runs/
+/_index/
+/baseline.json
+/_*.log*
+/_dedupe-journal.jsonl
+/_inspect.txt
+/_selftest.txt
+/tests/*.png
+/tests/test-results.json
+/tests/verified.json
+/installation-result.json
+/_jobs/
+/redesign-baseline.json
+/redesign-installation.json
+/tests/*-results.json
+
+/search-ui-baseline.json
+/search-ui-installation.json
+
+# Machine-specific settings and one-off deployments
+/config.json
+/install-update.ps1
+/install-redesign.ps1
+/install-search-theme.ps1
+/_backups/
+/_upgrade-tests/
