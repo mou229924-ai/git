@@ -11,6 +11,10 @@ using System.Runtime.InteropServices;
 public static class DialogTestNative {
     [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr handle, uint command);
+    [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr handle, out uint processId);
+    [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
+    [DllImport("user32.dll")] public static extern bool AttachThreadInput(uint current, uint foreground, bool attach);
+    [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr handle);
 }
 '@
 
@@ -33,6 +37,10 @@ $script:ColBg=[Drawing.Color]::FromArgb(255,251,240)
 $script:ColText2=[Drawing.Color]::FromArgb(126,114,88)
 $script:ColSurface=[Drawing.Color]::FromArgb(250,241,212)
 $checks=New-Object Collections.ArrayList
+$script:FocusDiagnostics=New-Object Collections.ArrayList
+$savedInputLanguage=[Windows.Forms.InputLanguage]::CurrentInputLanguage
+$asciiInputLanguage=@([Windows.Forms.InputLanguage]::InstalledInputLanguages|Where-Object {$_.Culture.Name -eq 'en-US'}|Select-Object -First 1)
+if(-not $Headless -and $asciiInputLanguage.Count){[Windows.Forms.InputLanguage]::CurrentInputLanguage=$asciiInputLanguage[0]}
 function Check([string]$Label,[bool]$Passed) {
     [void]$checks.Add(@{Name=$Label;Passed=$Passed})
     Write-Output ((@('FAIL','PASS')[[int]$Passed])+' '+$Label)
@@ -43,9 +51,22 @@ function All-Controls($Parent) {
 function Update-DirectoryChoices { $script:ChoicesRefreshed=$true }
 function Update-NavigationTree { $script:TreeRefreshed=$true }
 
+function Activate-DialogTestOwner($Owner) {
+    if($Headless){return}
+    # Simulate selecting the test application first. Do not focus the dialog being asserted.
+    $foreground=[DialogTestNative]::GetForegroundWindow();$foregroundProcess=[uint32]0
+    $foregroundThread=[DialogTestNative]::GetWindowThreadProcessId($foreground,[ref]$foregroundProcess)
+    $currentThread=[DialogTestNative]::GetCurrentThreadId();$attached=$false
+    try{
+        if($foregroundThread -and $foregroundThread -ne $currentThread){$attached=[DialogTestNative]::AttachThreadInput($currentThread,$foregroundThread,$true)}
+        $Owner.BringToFront();[void][DialogTestNative]::SetForegroundWindow($Owner.Handle);$Owner.Activate()
+        [Windows.Forms.Application]::DoEvents()
+    }finally{if($attached){[void][DialogTestNative]::AttachThreadInput($currentThread,$foregroundThread,$false)}}
+}
+
 $form=New-Object Windows.Forms.Form
 $form.Text='Dialog regression test owner'; $form.Size=New-Object Drawing.Size(500,260)
-$form.StartPosition='CenterScreen'; $form.Show(); $form.Activate()
+$form.StartPosition='CenterScreen'; $form.Show(); Activate-DialogTestOwner $form
 try {
     # Exercise the real nested "new directory" button on the topmost classifier popup.
     $state=@{Deadline=(Get-Date).AddSeconds(10);Launched=$false;Handled=$false}
@@ -56,8 +77,15 @@ try {
             $input=$windows | Where-Object { @((All-Controls $_) | Where-Object { $_ -is [Windows.Forms.TextBox] -and -not $_.ReadOnly }).Count -gt 0 } | Select-Object -First 1
             if($input -and -not $state.Handled) {
                 $box=(All-Controls $input) | Where-Object { $_ -is [Windows.Forms.TextBox] -and -not $_.ReadOnly } | Select-Object -First 1
+                if($state.TypedSent) {
+                    # SendKeys can return before posted characters are consumed. Submit only after the real input catches up.
+                    if($box.Text -eq 'new-directory-123'){$state.Handled=$true;[Windows.Forms.SendKeys]::SendWait('{ENTER}')}
+                    elseif((Get-Date) -ge $state.TypedDeadline){$state.Handled=$true;Check 'Nested keyboard input is delivered completely' $false;$input.DialogResult='Cancel';$input.Close()}
+                    return
+                }
                 $parent=$windows | Where-Object { $_ -ne $input -and $_ -ne $form } | Select-Object -First 1
                 if(-not $state.FocusDeadline) {
+                    if(-not $Headless){$box.ImeMode='Disable'}
                     $state.FocusDeadline=(Get-Date).AddSeconds(3)
                     Check 'Nested input has an explicit classifier owner' ($input.Owner -eq $parent -and $null -ne $parent)
                     Check 'Nested input remains above its topmost owner' $input.TopMost
@@ -73,7 +101,7 @@ try {
                     } else { Check 'Nested input receives foreground and keyboard focus' $ready }
                     if($ready) {
                         if($Headless) { $box.Text='new-directory-123'; $input.AcceptButton.PerformClick() }
-                        else { [Windows.Forms.SendKeys]::SendWait('new-directory-123{ENTER}') }
+                        else { $state.Handled=$false;$state.TypedSent=$true;$state.TypedDeadline=(Get-Date).AddSeconds(3);if($asciiInputLanguage.Count){[Windows.Forms.InputLanguage]::CurrentInputLanguage=$asciiInputLanguage[0]};[Windows.Forms.SendKeys]::SendWait('new-directory-123') }
                     } else { $input.DialogResult='Cancel'; $input.Close(); $parent.Close() }
                 }
             } elseif(-not $state.Launched) {
@@ -93,10 +121,11 @@ try {
     $timer.Start()
     try { $result=Show-SubjectDialog -FileName 'test.txt' -Prompt 'Choose a test directory' -HasSnippet $false }
     finally { $timer.Stop(); $timer.Dispose() }
+    $script:NestedTestResult=@{Action=$result.Action;NameLength=([string]$result.Name).Length;SyntheticName=[string]$result.Name;Language=[string]([Windows.Forms.InputLanguage]::CurrentInputLanguage.Culture.Name)}
     Check 'Classifier returns the typed new directory' ($result.Action -eq 'new' -and $result.Name -eq 'new-directory-123')
 
     foreach($mode in @('save','cancel','reopen')) {
-        $form.BringToFront(); $form.Activate(); [Windows.Forms.Application]::DoEvents()
+        Activate-DialogTestOwner $form
         $state=@{Deadline=(Get-Date).AddSeconds(8);Handled=$false;Mode=$mode}
         $timer=New-Object Windows.Forms.Timer; $timer.Interval=200
         $timer.Add_Tick({
@@ -105,11 +134,18 @@ try {
                 if($dialog -and -not $state.Handled) {
                     $box=(All-Controls $dialog) | Where-Object { $_ -is [Windows.Forms.ComboBox] } | Select-Object -First 1
                     if(-not $state.FocusDeadline) {
+                        if(-not $Headless){$box.ImeMode='Disable'}
                         $state.FocusDeadline=(Get-Date).AddSeconds(3)
                         Check ($state.Mode+': directory manager is owned by the library') ($dialog.Owner -eq $form)
                     }
                     $ready=$Headless -or ($box.ContainsFocus -and [DialogTestNative]::GetForegroundWindow() -eq $dialog.Handle)
                     if($ready -or (Get-Date) -ge $state.FocusDeadline) {
+                        if(-not $ready -and -not $Headless){
+                            $fgHandle=[DialogTestNative]::GetForegroundWindow();$fgProcess=[uint32]0
+                            [void][DialogTestNative]::GetWindowThreadProcessId($fgHandle,[ref]$fgProcess)
+                            $fgName='';try{$fgName=[Diagnostics.Process]::GetProcessById([int]$fgProcess).ProcessName}catch{}
+                            [void]$script:FocusDiagnostics.Add(@{Mode=$state.Mode;Expected=$dialog.Handle.ToInt64();Foreground=$fgHandle.ToInt64();ForegroundProcess=$fgName;SameProcess=($fgProcess -eq $PID);DialogFocus=$dialog.ContainsFocus;InputFocus=$box.ContainsFocus;OwnerFocus=$form.ContainsFocus;OwnerTopMost=$form.TopMost;DialogTopMost=$dialog.TopMost;InputEnabled=$box.Enabled;ActiveControl=[string]$dialog.ActiveControl})
+                        }
                         $state.Handled=$true
                         if($Headless) {
                             [void]$skipped.Add($state.Mode+': directory field has keyboard focus (requires an interactive desktop)')
@@ -120,7 +156,7 @@ try {
                             if($state.Mode -eq 'save') {
                                 Check 'Enter is connected to saving the directory' ($null -ne $dialog.AcceptButton)
                                 if($Headless) { $box.Text=$text; $dialog.AcceptButton.PerformClick() }
-                                else { [Windows.Forms.SendKeys]::SendWait($text+'{ENTER}') }
+                                else { if($asciiInputLanguage.Count){[Windows.Forms.InputLanguage]::CurrentInputLanguage=$asciiInputLanguage[0]};[Windows.Forms.SendKeys]::SendWait($text+'{ENTER}') }
                             } else {
                                 Check ($state.Mode+': Escape can cancel the dialog') ($null -ne $dialog.CancelButton)
                                 if($Headless) { $box.Text=$text; $dialog.CancelButton.PerformClick() }
@@ -143,8 +179,9 @@ try {
     Check 'Saving refreshes the directory tree' ([bool]$script:TreeRefreshed)
 } finally {
     $form.Close(); $form.Dispose()
+    if(-not $Headless -and $savedInputLanguage){[Windows.Forms.InputLanguage]::CurrentInputLanguage=$savedInputLanguage}
 }
-$report=@{Passed=@($checks | Where-Object Passed).Count;Failed=@($checks | Where-Object {-not $_.Passed}).Count;Checks=@($checks.ToArray());Headless=[bool]$Headless;SkippedInteractiveAssertions=@($skipped.ToArray())}
+$report=@{Passed=@($checks | Where-Object Passed).Count;Failed=@($checks | Where-Object {-not $_.Passed}).Count;Checks=@($checks.ToArray());NestedTestResult=$script:NestedTestResult;FocusDiagnostics=@($script:FocusDiagnostics.ToArray());Headless=[bool]$Headless;SkippedInteractiveAssertions=@($skipped.ToArray())}
 if(-not $Output){$Output=Join-Path $PSScriptRoot 'dialog-results.json'}
 [IO.File]::WriteAllText($Output,($report | ConvertTo-Json -Depth 5),$script:Utf8)
 Write-Output ('TOTAL passed='+$report.Passed+' failed='+$report.Failed)

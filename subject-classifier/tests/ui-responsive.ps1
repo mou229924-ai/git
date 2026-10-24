@@ -15,6 +15,12 @@ $form.StartPosition='Manual';$form.Location=New-Object Drawing.Point(30,30);$for
 $script:Heartbeats=0
 $heartbeat=New-Object Windows.Forms.Timer;$heartbeat.Interval=30;$heartbeat.Add_Tick({$script:Heartbeats++});$heartbeat.Start()
 try{
+    Pump-Ui 160
+    Ui-Check 'Result actions including listener stay inside the header' ($resultActions.Right -le $resultHeader.ClientSize.Width -and $watchButton.Right -le $resultActions.ClientSize.Width)
+    Ui-Check 'Both page buttons stay entirely inside the footer' ($pageNextButton.Right -le $pageBar.ClientSize.Width -and $pageNextButton.Bottom -le $pageBar.ClientSize.Height -and $pagePreviousButton.Left -ge 0)
+    $savedWindowSize=$form.Size;$form.Size=$form.MinimumSize;Pump-Ui 160
+    Ui-Check 'Commands and paging fit the minimum window width' ($resultActions.Right -le $resultHeader.ClientSize.Width -and $pageNextButton.Right -le $pageBar.ClientSize.Width -and $resultLayout.Right -le ($resultCard.ClientSize.Width-$resultCard.Padding.Right))
+    $form.Size=$savedWindowSize;Pump-Ui 160
     Ui-Check 'Search input is separated from the magnifier' ($txtQuery.Left -ge (S 45))
     Ui-Check 'Search input stays clear of the search button' (($txtQuery.Right+(S 5)) -lt $btnSearch.Left)
     Ui-Check 'Search field occupies the main content width' ($searchShell.Width -gt ($form.ClientSize.Width*0.65))

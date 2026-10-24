@@ -34,5 +34,6 @@
   "session-ui.ps1",
   "tools/install-desktop.ps1",
   "learned-classification.ps1",
-  "learning-ui.ps1"
+  "learning-ui.ps1",
+  "NativeShortcut.cs"
 ]

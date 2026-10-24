@@ -195,7 +195,8 @@ $script:ColAccent=[Drawing.Color]::FromArgb(156,104,20)
 $form.BackColor=$script:ColBg
 $form.ClientSize=New-Object Drawing.Size((S 1380),(S 820))
 $form.MinimumSize=New-Object Drawing.Size((S 1100),(S 650))
-$rootLayout.Controls.Clear();$rootLayout.RowStyles.Clear();$rootLayout.RowCount=6;$rootLayout.Padding=New-Object Windows.Forms.Padding(0)
+$rootLayout.Controls.Clear();$rootLayout.RowStyles.Clear();$rootLayout.RowCount=6
+$rootLayout.ColumnStyles.Clear();[void]$rootLayout.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle('Percent',100)));$rootLayout.Padding=New-Object Windows.Forms.Padding(0)
 foreach($height in @(44,48,44,42)){[void]$rootLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Absolute',(S $height))))}
 [void]$rootLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Percent',100)))
 [void]$rootLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Absolute',(S 28))))
@@ -464,19 +465,21 @@ $resultCard=New-Object Nailong.RoundSurface
 $resultCard.Dock='Fill';$resultCard.Fill=[Drawing.Color]::White;$resultCard.Stroke=[Drawing.Color]::FromArgb(239,235,224);$resultCard.Radius=(S 18)
 $resultCard.Padding=New-Object Windows.Forms.Padding((S 16),(S 10),(S 16),(S 12));$resultCard.Margin=New-Object Windows.Forms.Padding(0,0,0,(S 4));$rootLayout.Controls.Add($resultCard,0,4)
 $resultLayout=New-Object Windows.Forms.TableLayoutPanel;$resultLayout.Dock='Fill';$resultLayout.RowCount=3;$resultLayout.ColumnCount=1;$resultLayout.BackColor=[Drawing.Color]::White
+[void]$resultLayout.ColumnStyles.Add((New-Object Windows.Forms.ColumnStyle('Percent',100)))
 [void]$resultLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Absolute',(S 44))));[void]$resultLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Percent',100)))
 $resultCard.Controls.Add($resultLayout)
 [void]$resultLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Absolute',(S 36))))
 $pageBar=New-Object Windows.Forms.FlowLayoutPanel; $pageBar.Dock='Fill'; $pageBar.FlowDirection='RightToLeft'; $pageBar.WrapContents=$false; $pageBar.BackColor=[Drawing.Color]::White
 $pageNextButton=New-Object Windows.Forms.Button; $pageNextButton.Text='下一页'; $pageNextButton.Width=(S 84); $pageNextButton.Enabled=$false
 $pagePreviousButton=New-Object Windows.Forms.Button; $pagePreviousButton.Text='上一页'; $pagePreviousButton.Width=(S 84); $pagePreviousButton.Enabled=$false
+foreach($pageButton in @($pageNextButton,$pagePreviousButton)){$pageButton.Height=(S 28);$pageButton.Margin=New-Object Windows.Forms.Padding((S 4),(S 3),(S 4),0)}
 $pageInfo=New-Object Windows.Forms.Label; $pageInfo.Text='第 1 / 1 页'; $pageInfo.AutoSize=$true; $pageInfo.Margin=New-Object Windows.Forms.Padding((S 12),(S 7),(S 12),0)
 $pageBar.Controls.AddRange(@($pageNextButton,$pageInfo,$pagePreviousButton)); $resultLayout.Controls.Add($pageBar,0,2)
 $pageNextButton.Add_Click({$script:PageOffset+=$script:PageSize;Invoke-Search -KeepPage})
 $pagePreviousButton.Add_Click({$script:PageOffset=[Math]::Max(0,$script:PageOffset-$script:PageSize);Invoke-Search -KeepPage})
 $resultHeader=New-Object Windows.Forms.Panel;$resultHeader.Dock='Fill';$resultHeader.BackColor=[Drawing.Color]::White;$resultLayout.Controls.Add($resultHeader,0,0)
 $resultHeading=New-Object Windows.Forms.Label;$resultHeading.Text='全部资料';$resultHeading.AutoSize=$true;$resultHeading.Font=New-Object Drawing.Font('Microsoft YaHei UI',12,[Drawing.FontStyle]::Bold);$resultHeading.ForeColor=$script:ColText;$resultHeading.Location=New-Object Drawing.Point((S 5),(S 9));$resultHeader.Controls.Add($resultHeading)
-$resultActions=New-Object Windows.Forms.FlowLayoutPanel;$resultActions.AutoSize=$true;$resultActions.WrapContents=$false;$resultActions.BackColor=[Drawing.Color]::White;$resultHeader.Controls.Add($resultActions)
+$resultActions=New-Object Windows.Forms.FlowLayoutPanel;$resultActions.AutoSize=$true;$resultActions.AutoSizeMode='GrowAndShrink';$resultActions.Dock='Right';$resultActions.WrapContents=$false;$resultActions.BackColor=[Drawing.Color]::White;$resultHeader.Controls.Add($resultActions)
 foreach($definition in @(@('目录','navigation'),@('批量打印','Show-BatchPrint'),@('更多 ···','more'))){
     $button=New-Object Windows.Forms.Button;$button.Text=$definition[0];$button.Size=New-Object Drawing.Size((S 86),(S 30))
     $button.FlatStyle='Flat';$button.FlatAppearance.BorderSize=0;$button.UseVisualStyleBackColor=$false;$button.BackColor=[Drawing.Color]::White;$button.ForeColor=$script:ColText2;$button.Cursor='Hand'
@@ -485,7 +488,7 @@ foreach($definition in @(@('目录','navigation'),@('批量打印','Show-BatchPr
     $resultActions.Controls.Add($button)
 }
 $previewToggle.Text='预览';$previewToggle.BackColor=[Drawing.Color]::White;$previewToggle.ForeColor=$script:ColText2;$previewToggle.Margin=New-Object Windows.Forms.Padding((S 6),(S 6),0,0);$resultActions.Controls.Add($previewToggle)
-$resultHeader.Add_Resize({$resultActions.Left=[Math]::Max((S 180),$resultHeader.Width-$resultActions.PreferredSize.Width-(S 3));$resultActions.Top=(S 3)})
+
 $moreMenu=New-Object Windows.Forms.ContextMenuStrip
 foreach($definition in @(@('管理目录','Show-DirectoryManager'),@('重命名 F2','Rename-SelectedFile'),@('检查重复文档','Show-DuplicateReview'),@('重建搜索索引','Invoke-Rebuild'),@('识别扫描件文字','Invoke-OcrRebuild'),@('运行环境','Show-ApplicationEnvironment'))){
     $item=New-Object Windows.Forms.ToolStripMenuItem;$item.Text=$definition[0];$operation=$definition[1];$item.Add_Click({& $operation}.GetNewClosure());[void]$moreMenu.Items.Add($item)
