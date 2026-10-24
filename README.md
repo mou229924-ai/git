@@ -6,10 +6,9 @@
 
 ## 快速开始
 
-1. 下载本仓库并解压，进入 `subject-classifier` 文件夹。
-2. 复制 `config.example.json`，将副本命名为 `config.json`。
-3. 用文本编辑器修改 `config.json` 的 `inbox`，填写自己的资料目录绝对路径，例如 `D:/资料库`，保存为 UTF-8。
-4. 双击 `奶龙.code.vbs` 打开界面；双击 `启动监听.vbs` 开启后台自动分类。
+1. 从 [版本发布页](https://github.com/mou229924-ai/git/releases) 下载 Windows ZIP 并解压。
+2. 进入 `subject-classifier`，双击 `奶龙.code.vbs`。
+3. 首次启动选择自己的资料文件夹，之后会保留配置。
 
 需要 Windows 10/11、Windows PowerShell 5.1 和系统自带的 .NET Framework。Office 文档原版式预览、打印依赖已安装的对应应用或系统预览组件。
 
@@ -24,3 +23,5 @@
 [完整使用与测试说明](subject-classifier/README.md)
 
 仓库包含源码、主题素材、配置示例和测试脚本。个人资料、本机配置、搜索索引、日志、备份和测试生成文件已排除。
+
+各版本记录见 [更新日志](CHANGELOG.md)。发布包包含配置示例；个人资料、本机配置和过往测试目录不参与分发。

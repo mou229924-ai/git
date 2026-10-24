@@ -4,7 +4,11 @@ Windows 本地文件资料库。可自定义目录与分类关键词，初始提
 
 ## 首次配置
 
-需要 Windows 10/11 和 Windows PowerShell 5.1（系统自带）。将 `config.example.json` 复制为 `config.json`，将 `inbox` 改成自己的资料目录绝对路径，例如 `D:/资料库`。请使用 UTF-8 保存 JSON，路径建议使用 `/`。本机配置不会提交到 Git。
+从 GitHub Releases 下载 Windows ZIP 后解压，双击 `奶龙.code.vbs`。首次启动会让你选择资料目录，程序自动从随包附带的 `config.example.json` 创建本机配置；以后启动保留原配置。需要 Windows 10/11 和系统自带的 Windows PowerShell 5.1。资料目录应在程序文件夹之外。
+
+安装包不需要 Git。源码仓库位于 GitHub，安装目录与源码检出目录各有用途；ZIP 中没有 `.git` 属于正常情况。每版编号见 `VERSION`，完整变更见仓库根目录 `CHANGELOG.md`。历史测试数据和升级备份不进入发布包。
+
+也可手动复制 `config.example.json` 为 `config.json`，将 `inbox` 改成自己的绝对路径并以 UTF-8 保存。
 
 ## 使用
 

@@ -19,5 +19,7 @@
   "background.ps1",
   "preview-host.ps1",
   "NativePreview.cs",
-  "VERSION"
+  "VERSION",
+  "setup.ps1",
+  "config.example.json"
 ]

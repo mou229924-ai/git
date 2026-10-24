@@ -242,14 +242,19 @@
   "ignoreFiles": [
     "classifier.ps1",
     "config.json",
-    "start.vbs",
-    "stop.vbs",
-    "install-autostart.ps1",
     "_classifier.log",
     "_classifier.log.old",
     "_selftest.txt",
     "_inspect.txt",
-    "desktop.ini"
+    "desktop.ini",
+    "config.example.json",
+    "application-files.json",
+    "setup.ps1",
+    "search.ps1",
+    "奶龙.code.vbs",
+    "启动监听.vbs",
+    "停止监听.vbs",
+    "search.vbs"
   ],
   "ignoreExtensions": [
     ".tmp",
