@@ -37,18 +37,22 @@ Windows 本地文件资料库。可自定义目录与分类关键词，初始提
 
 ## 测试
 
-先完成上述配置，再在本目录的 Windows PowerShell 运行：
+在 Windows PowerShell 运行一键检查，无需准备个人资料或 PDF：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tests\run-tests.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\check.ps1
 ```
 
-测试使用独立资料验证真实回收、恢复、文件变化、锁定、目录链接、索引并发、导入分类、重命名及模拟打印，不会向打印机发送任务。`-ScratchBase` 可指定另一个磁盘的隔离测试位置，以验证跨磁盘移动和该磁盘的回收站。
+默认执行源码语法/结构检查、隔离安全测试、后台任务和自动生成的图片/PDF 预览测试。没有交互桌面时会明确跳过前台激活和真实键盘输入断言。
 
-全部测试通过后生成 `tests\verified.json`。删除功能会检查测试结果、代码及测试脚本哈希、回收测试和磁盘；任何不匹配都会锁定删除入口。生成的索引、日志和测试资料不纳入 Git。
+本机完整验证（会短暂显示隔离测试窗口，并验证测试文件的真实回收与恢复）：
 
-界面采用目录树、标准文件列表和可调整宽度的预览窗格。去重扫描、搜索和索引更新在后台独立运行；扫描可随时取消。预览组件也独立运行，退出或故障不会终止主窗口。
+```powershell
+powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tools\check.ps1 -Desktop -Recycle
+```
 
-`tests/background-tests.ps1` 和界面集成测试使用专门的隔离资料库，要求 `inbox` 指向程序目录中的 `test-library`，不可针对日常资料目录运行。预览测试还需要自行准备有效的 PDF：`test-library/物理/PDF预览测试.pdf`；界面响应测试需要 `test-library/物理/真实PDF预览测试.pdf`。这些资料文件不会随仓库分发。核心安全测试会自行生成测试数据。
+测试自动在临时目录建立隔离应用和资料，运行后清理；报告保存到被 Git 排除的 `test-artifacts/latest`。源码配置与删除验证记录不会被一键检查修改，测试不向打印机发送任务。CI 使用同一入口，上传经过筛选的测试报告。
 
-弹窗回归测试：在本目录运行 `powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tests\dialog-tests.ps1`。测试会短暂显示隔离窗口，验证新建目录弹窗的归属、前台焦点、实际键盘输入、Enter 保存、Esc 取消和再次打开，不操作日常资料。
+实际使用回收功能前，在应用所在目录运行 `tests/run-tests.ps1`，全部安全测试通过后生成 `tests/verified.json`。入口会核对运行代码、测试脚本哈希和真实测试磁盘；代码变化、跳过回收测试或换磁盘后均需重新验证。可通过 `-ScratchBase` 指定资料磁盘上的独立测试目录。
+
+界面采用目录树、标准文件列表和可调整宽度的预览窗格。去重扫描、搜索、索引更新和预览在后台进程运行。

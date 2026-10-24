@@ -1,4 +1,5 @@
-﻿$ErrorActionPreference='Stop'
+﻿param([switch]$SkipRecycle)
+$ErrorActionPreference='Stop'
 $app=Split-Path $PSScriptRoot -Parent
 . (Join-Path $app 'lib.ps1')
 if(-not ([IO.Path]::GetFullPath($script:Root)).StartsWith(([IO.Path]::GetFullPath($app).TrimEnd('\')+'\test-library'),[StringComparison]::OrdinalIgnoreCase)){throw '仅允许在隔离资料库中测试。'}
@@ -25,14 +26,22 @@ Verify 'Background scanner returns a completed plan' ($scan.State -eq 'done')
 $plan=@($scan.Data.Plan|Where-Object {$_.Duplicate -eq $duplicate})
 Verify 'Background scanner detects the isolated duplicate correctly' ($plan.Count -eq 1 -and $plan[0].Keep -eq $keep)
 $cleanup=Run-Worker @{Task='cleanup';Plan=$plan}
-Verify 'Background cleanup reports one recycled copy' ($cleanup.State -eq 'done' -and @($cleanup.Data.Outcomes|Where-Object Status -eq 'recycled').Count -eq 1)
-Verify 'Background cleanup preserves the retained file exactly' ((Test-Path -LiteralPath $keep) -and (Get-FileHash -LiteralPath $keep -Algorithm SHA256).Hash -eq $before -and -not (Test-Path -LiteralPath $duplicate))
+$expectedSearchCount=1
+if($SkipRecycle){
+    $expectedSearchCount=2
+    Verify 'CI has no verification report enabling recycling' (-not (Test-DedupeVerified))
+    Verify 'Unverified background cleanup returns an explicit failure' ($cleanup.State -eq 'failed' -and [bool]$cleanup.Error)
+    Verify 'Blocked cleanup preserves both complete documents' ((Test-Path -LiteralPath $keep) -and (Test-Path -LiteralPath $duplicate) -and (Get-FileHash -LiteralPath $keep -Algorithm SHA256).Hash -eq $before -and (Get-FileHash -LiteralPath $duplicate -Algorithm SHA256).Hash -eq $before)
+}else{
+    Verify 'Background cleanup reports one recycled copy' ($cleanup.State -eq 'done' -and @($cleanup.Data.Outcomes|Where-Object Status -eq 'recycled').Count -eq 1)
+    Verify 'Background cleanup preserves the retained file exactly' ((Test-Path -LiteralPath $keep) -and (Get-FileHash -LiteralPath $keep -Algorithm SHA256).Hash -eq $before -and -not (Test-Path -LiteralPath $duplicate))
+}
 $index=Run-Worker @{Task='index'}
 Verify 'Background index update completes before snapshot search' ($index.State -eq 'done')
 $search=Run-Worker @{Task='search';Query='async-task-fixture';Directory='后台测试';Content=$true;Since=[datetime]::MinValue.ToString('o');Extensions=@('.txt');SortKey='mtimeTicks';Descending=$true}
-Verify 'Background search combines directory, content and format filters' ($search.State -eq 'done' -and @($search.Data.Results).Count -eq 1 -and $search.Data.Results[0].full -eq $keep)
+Verify 'Background search combines directory, content and format filters' ($search.State -eq 'done' -and @($search.Data.Results).Count -eq $expectedSearchCount -and @($search.Data.Results|Where-Object full -eq $keep).Count -eq 1)
 $invalid=Run-Worker @{Task='invalid-operation'}
 Verify 'Unknown worker task returns an explicit failure state' ($invalid.State -eq 'failed' -and [bool]$invalid.Error)
-$report=@{Passed=@($checks|Where-Object Passed).Count;Failed=@($checks|Where-Object{-not $_.Passed}).Count;Checks=@($checks.ToArray())}
+$report=@{Passed=@($checks|Where-Object Passed).Count;Failed=@($checks|Where-Object{-not $_.Passed}).Count;Checks=@($checks.ToArray());RecycleTest=(-not $SkipRecycle)}
 [IO.File]::WriteAllText((Join-Path $PSScriptRoot 'background-results.json'),($report|ConvertTo-Json -Depth 5),$script:Utf8)
 if($report.Failed){exit 1}

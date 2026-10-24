@@ -4,7 +4,10 @@ $sourceDir = Split-Path $PSScriptRoot -Parent
 . (Join-Path $sourceDir 'lib.ps1')
 $script:Passed = 0
 $script:Failures = New-Object Collections.ArrayList
-$runBase = Join-Path $sourceDir 'test-runs'
+$tempBase=[IO.Path]::GetTempPath()
+$productionVolume=[IO.Path]::GetPathRoot($script:Root)
+$runBase=Join-Path $tempBase 'Nailong-code-tests'
+if($productionVolume -ne [IO.Path]::GetPathRoot($tempBase)){$runBase=Join-Path $productionVolume '.Nailong.code-tests'}
 if ($ScratchBase) { $runBase = $ScratchBase }
 $runDir = Join-Path $runBase ([guid]::NewGuid().ToString('N'))
 $scratchApp = Join-Path $runDir '_程序'
@@ -48,6 +51,19 @@ function Stamp([string]$Directory) {
         TestHash=(Get-FileHash -LiteralPath (Join-Path $Directory 'tests\run-tests.ps1') -Algorithm SHA256).Hash
     }
     $report | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $Directory 'tests\verified.json') -Encoding UTF8
+}
+
+function Remove-CoreTestScratch {
+    param([string]$Path,[string]$AllowedParent,[string]$Pattern)
+    $full=[IO.Path]::GetFullPath($Path).TrimEnd('\');$parent=[IO.Path]::GetFullPath($AllowedParent).TrimEnd('\')
+    if([IO.Path]::GetDirectoryName($full) -ne $parent -or [IO.Path]::GetFileName($full) -notmatch $Pattern){throw 'Unsafe safety-test cleanup target.'}
+    $ancestor=New-Object IO.DirectoryInfo($parent)
+    while($ancestor){if($ancestor.Exists -and ($ancestor.Attributes -band [IO.FileAttributes]::ReparsePoint)){throw 'Linked safety-test parent.'};$ancestor=$ancestor.Parent}
+    function Remove-CoreTestNode([string]$Node){
+        $item=Get-Item -LiteralPath $Node -Force -ErrorAction Stop
+        if($item.PSIsContainer){if(-not ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)){foreach($child in @(Get-ChildItem -LiteralPath $Node -Force)){Remove-CoreTestNode $child.FullName}};[IO.Directory]::Delete($Node)}else{[IO.File]::Delete($Node)}
+    }
+    if(Test-Path -LiteralPath $full){Remove-CoreTestNode $full}
 }
 
 $published = Join-Path $sourceDir 'tests\verified.json'
@@ -206,7 +222,7 @@ try {
     $top2 = Put 'rank\target.txt' 'other'
     $null = Sync-LibraryIndex
     Check 'Search ranks all candidates before applying limit' (@(Search-Index -Query 'target' -Limit 1)[0].full -eq $top2)
-    $desktopTestDir = Join-Path $sourceDir ('test-runs\desktop-' + [guid]::NewGuid().ToString('N'))
+    $desktopTestDir = Join-Path $tempBase ('nailong-desktop-' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory -Path $desktopTestDir -Force | Out-Null
     $source = Join-Path $desktopTestDir 'desktop.txt'
     [IO.File]::WriteAllText($source,'import-unique',$script:Utf8)
@@ -336,10 +352,16 @@ try {
     }
 } catch { [void]$script:Failures.Add($_.Exception.ToString()); Write-Output $_.ScriptStackTrace; Write-Output $_.Exception.ToString() }
 finally {
+    if($script:Failures.Count -eq 0){
+        try{
+            Remove-CoreTestScratch -Path $runDir -AllowedParent $runBase -Pattern '^[a-f0-9]{32}$'
+            if($desktopTestDir){Remove-CoreTestScratch -Path $desktopTestDir -AllowedParent $tempBase -Pattern '^nailong-desktop-[a-f0-9]{32}$'}
+        }catch{[void]$script:Failures.Add('Scratch cleanup: '+$_.Exception.Message)}
+    }
     $report = @{
         Passed=$script:Passed; Failed=$script:Failures.Count; Failures=@($script:Failures.ToArray())
         Time=(Get-Date).ToString('o'); Scratch=$runDir; RecycleTest=(-not $SkipRecycle); TestedVolume=[IO.Path]::GetPathRoot($scratchRoot)
-        CrossVolumeTest=([IO.Path]::GetPathRoot($scratchRoot) -ne [IO.Path]::GetPathRoot($sourceDir))
+        CrossVolumeTest=([IO.Path]::GetPathRoot($scratchRoot) -ne [IO.Path]::GetPathRoot($desktopTestDir))
         CodeHash=(Get-ApplicationCodeHash -Directory $sourceDir)
         TestHash=(Get-FileHash -LiteralPath $PSCommandPath -Algorithm SHA256).Hash
     }

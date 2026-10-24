@@ -28,3 +28,5 @@
 /install-dialog-fix.ps1
 /dialog-baseline.json
 /dialog-installation.json
+
+/test-artifacts/

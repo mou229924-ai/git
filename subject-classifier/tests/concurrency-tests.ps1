@@ -64,7 +64,7 @@ foreach ($relative in $manifest) {
 Copy-Item -LiteralPath (Join-Path $source 'application-files.json') -Destination $app
 $config = [IO.File]::ReadAllText((Join-Path $source 'config.example.json'),[Text.Encoding]::UTF8) | ConvertFrom-Json
 $config.inbox = $library
-$config.stablePolls = 0
+$config.stablePolls = 2
 $config.processExistingOnStartup = $true
 [IO.File]::WriteAllText((Join-Path $app 'config.json'),($config | ConvertTo-Json -Depth 12),[Text.Encoding]::UTF8)
 . (Join-Path $app 'lib.ps1')
@@ -84,6 +84,7 @@ function Start-TestWorker {
     New-Item -ItemType Directory -Path $signals -Force | Out-Null
     $workerArguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Worker ' + $Mode + ' -AppDir "' + $app + '" -SignalDir "' + $signals + '"'
     $process = Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $workerArguments -PassThru
+    $processHandle=$process.Handle
     [void]$processes.Add($process)
     [void]$releaseFiles.Add((Join-Path $signals 'release'))
     return [pscustomobject]@{Process=$process;Signals=$signals}
@@ -111,7 +112,7 @@ try {
     Check 'SkipIfBusy returns promptly without running its action' (-not $script:BusyActionRan -and $watch.ElapsedMilliseconds -lt 1000)
     $automatic = Join-Path $library '物理试卷.txt'
     [IO.File]::WriteAllText($automatic,'concurrency-classification-fixture',[Text.Encoding]::UTF8)
-    $watch.Restart(); Scan-Once; $watch.Stop()
+    $null=Scan-Once; $watch.Restart(); Scan-Once; $watch.Stop()
     Check 'Watcher skips a busy move without blocking its polling loop' ($watch.ElapsedMilliseconds -lt 1800 -and $script:LastScanBusyCount -gt 0 -and [IO.File]::Exists($automatic))
     $log = ''; if ([IO.File]::Exists($script:LogPath)) { $log = [IO.File]::ReadAllText($script:LogPath) }
     Check 'Normal busy contention is not logged as ERROR' ($log -notmatch '(?m)(TICK ERROR|^.*\sERROR\s|FOLDER ERROR)')
@@ -134,6 +135,7 @@ try {
         return @{Action='keep';Name=$null}
     }
     Scan-Once
+    Scan-Once
     Check 'Manual classification decision does not hold the library lock' ($script:DialogProbeCalled -and $script:DialogProbeAcquired)
     Check 'The mocked manual keep action preserves original bytes' ([IO.File]::ReadAllText($manual) -eq 'unrecognized-content-fixture')
     [IO.File]::Delete($manual)
@@ -149,7 +151,7 @@ try {
     Check 'Index body extraction leaves the library lock available' ($script:ShortLockRan -and $watch.ElapsedMilliseconds -lt 1200)
     $later = Join-Path $library '物理新增试卷.txt'
     [IO.File]::WriteAllText($later,'later-classifier-fixture',[Text.Encoding]::UTF8)
-    $watch.Restart(); Scan-Once; $watch.Stop()
+    Scan-Once; $watch.Restart(); Scan-Once; $watch.Stop()
     $laterTarget = Join-Path $library '物理\物理新增试卷.txt'
     Check 'A short classifier move completes while index extraction is paused' ($watch.ElapsedMilliseconds -lt 3500 -and [IO.File]::Exists($laterTarget))
     Stop-TestHold $index

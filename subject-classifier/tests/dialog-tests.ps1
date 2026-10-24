@@ -1,5 +1,7 @@
-﻿param([string]$Output = '')
+﻿param([string]$Output = '',[switch]$Headless)
 $ErrorActionPreference = 'Stop'
+$Headless = $Headless -or $env:NAILONG_TEST_HEADLESS -eq '1'
+$skipped = New-Object Collections.ArrayList
 $source = Split-Path $PSScriptRoot -Parent
 . (Join-Path $source 'lib.ps1')
 Add-Type -AssemblyName System.Windows.Forms,System.Drawing
@@ -62,12 +64,16 @@ try {
                 }
                 # Shown/BeginInvoke and foreground activation need more than one timer tick.
                 # Never send keystrokes until the actual target owns keyboard focus.
-                $ready=($box.ContainsFocus -and [DialogTestNative]::GetForegroundWindow() -eq $input.Handle)
+                $ready=$Headless -or ($box.ContainsFocus -and [DialogTestNative]::GetForegroundWindow() -eq $input.Handle)
                 if($ready -or (Get-Date) -ge $state.FocusDeadline) {
                     $state.Handled=$true
-                    Check 'Nested input receives foreground and keyboard focus' $ready
+                    if($Headless) {
+                        [void]$skipped.Add('Nested input receives foreground and keyboard focus (requires an interactive desktop)')
+                        Check 'Headless nested input remains editable' ($box.Enabled -and -not $box.ReadOnly)
+                    } else { Check 'Nested input receives foreground and keyboard focus' $ready }
                     if($ready) {
-                        [Windows.Forms.SendKeys]::SendWait('new-directory-123{ENTER}')
+                        if($Headless) { $box.Text='new-directory-123'; $input.AcceptButton.PerformClick() }
+                        else { [Windows.Forms.SendKeys]::SendWait('new-directory-123{ENTER}') }
                     } else { $input.DialogResult='Cancel'; $input.Close(); $parent.Close() }
                 }
             } elseif(-not $state.Launched) {
@@ -102,18 +108,23 @@ try {
                         $state.FocusDeadline=(Get-Date).AddSeconds(3)
                         Check ($state.Mode+': directory manager is owned by the library') ($dialog.Owner -eq $form)
                     }
-                    $ready=($box.ContainsFocus -and [DialogTestNative]::GetForegroundWindow() -eq $dialog.Handle)
+                    $ready=$Headless -or ($box.ContainsFocus -and [DialogTestNative]::GetForegroundWindow() -eq $dialog.Handle)
                     if($ready -or (Get-Date) -ge $state.FocusDeadline) {
                         $state.Handled=$true
-                        Check ($state.Mode+': directory field has keyboard focus') $ready
+                        if($Headless) {
+                            [void]$skipped.Add($state.Mode+': directory field has keyboard focus (requires an interactive desktop)')
+                            Check ($state.Mode+': headless directory field stays editable') ($box.Enabled -and $box.DropDownStyle -ne 'DropDownList')
+                        } else { Check ($state.Mode+': directory field has keyboard focus') $ready }
                         if($ready) {
                             $text='directory-'+$state.Mode
                             if($state.Mode -eq 'save') {
                                 Check 'Enter is connected to saving the directory' ($null -ne $dialog.AcceptButton)
-                                [Windows.Forms.SendKeys]::SendWait($text+'{ENTER}')
+                                if($Headless) { $box.Text=$text; $dialog.AcceptButton.PerformClick() }
+                                else { [Windows.Forms.SendKeys]::SendWait($text+'{ENTER}') }
                             } else {
                                 Check ($state.Mode+': Escape can cancel the dialog') ($null -ne $dialog.CancelButton)
-                                [Windows.Forms.SendKeys]::SendWait($text+'{ESC}')
+                                if($Headless) { $box.Text=$text; $dialog.CancelButton.PerformClick() }
+                                else { [Windows.Forms.SendKeys]::SendWait($text+'{ESC}') }
                             }
                         } else { $dialog.Close() }
                     }
@@ -133,7 +144,7 @@ try {
 } finally {
     $form.Close(); $form.Dispose()
 }
-$report=@{Passed=@($checks | Where-Object Passed).Count;Failed=@($checks | Where-Object {-not $_.Passed}).Count;Checks=@($checks.ToArray())}
+$report=@{Passed=@($checks | Where-Object Passed).Count;Failed=@($checks | Where-Object {-not $_.Passed}).Count;Checks=@($checks.ToArray());Headless=[bool]$Headless;SkippedInteractiveAssertions=@($skipped.ToArray())}
 if(-not $Output){$Output=Join-Path $PSScriptRoot 'dialog-results.json'}
 [IO.File]::WriteAllText($Output,($report | ConvertTo-Json -Depth 5),$script:Utf8)
 Write-Output ('TOTAL passed='+$report.Passed+' failed='+$report.Failed)

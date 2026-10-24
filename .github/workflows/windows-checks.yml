@@ -1,0 +1,38 @@
+name: Windows checks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Source lint and isolated reproducible checks
+        run: '& .\subject-classifier\tools\check.ps1'
+      - name: Publish test summaries and logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: windows-check-results
+          path: |
+            subject-classifier/test-artifacts/latest/*.json
+            subject-classifier/test-artifacts/latest/*.log
+          if-no-files-found: error
+          retention-days: 7

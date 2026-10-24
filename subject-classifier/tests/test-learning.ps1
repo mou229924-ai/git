@@ -1,14 +1,22 @@
 ﻿param([string]$SourceDir=(Split-Path $PSScriptRoot -Parent), [string]$Output='')
 $ErrorActionPreference='Stop'
-. (Join-Path $SourceDir 'lib.ps1')
-. (Join-Path $SourceDir 'classification-learning.ps1')
-. (Join-Path $SourceDir 'classifier-scan.ps1')
+function Get-SourceStateHash([string]$Path){if([IO.File]::Exists($Path)){return (Get-FileHash -LiteralPath $Path -Algorithm SHA256).Hash};return ''}
+$sourceConfigHash=Get-SourceStateHash (Join-Path $SourceDir 'config.json')
+$sourceGateHash=Get-SourceStateHash (Join-Path $SourceDir 'tests\verified.json')
 $run=Join-Path ([IO.Path]::GetTempPath()) ('nailong-learning-'+[guid]::NewGuid().ToString('N'))
 $script:Root=Join-Path $run 'library'
 $script:AppDir=Join-Path $run 'app'
 $script:ConfigPath=Join-Path $script:AppDir 'config.json'
 $script:LogPath=Join-Path $script:AppDir '_classifier.log'
 New-Item -ItemType Directory -Path $script:Root,$script:AppDir,(Join-Path $script:Root '项目'),(Join-Path $script:Root '票据') -Force | Out-Null
+$manifest=[IO.File]::ReadAllText((Join-Path $SourceDir 'application-files.json'),[Text.Encoding]::UTF8)|ConvertFrom-Json
+foreach($relative in $manifest){$destination=Join-Path $script:AppDir $relative;New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force|Out-Null;Copy-Item -LiteralPath (Join-Path $SourceDir $relative) -Destination $destination}
+foreach($name in @('application-files.json','config.example.json')){Copy-Item -LiteralPath (Join-Path $SourceDir $name) -Destination $script:AppDir -Force}
+$seed=[IO.File]::ReadAllText((Join-Path $SourceDir 'config.example.json'),[Text.Encoding]::UTF8)|ConvertFrom-Json
+$seed.inbox=$script:Root
+[IO.File]::WriteAllText($script:ConfigPath,($seed|ConvertTo-Json -Depth 20),[Text.Encoding]::UTF8)
+. (Join-Path $script:AppDir 'lib.ps1')
+. (Join-Path $script:AppDir 'classifier-scan.ps1')
 $script:Cfg=[pscustomobject]@{inbox=$script:Root;otherFolderName='其他';saveNewSubjects=$true;ignoreFiles=@();ignoreExtensions=@('.tmp');customSetting=[pscustomobject]@{Keep='custom-value'};subjects=@(
 [pscustomobject]@{name='项目';filenameKeywords=@('项目');contentKeywords=@('立项');customRuleField='preserve-me'},
 [pscustomobject]@{name='票据';filenameKeywords=@('发票');contentKeywords=@('税额')})}
@@ -69,7 +77,25 @@ Check 'Conflict is rechecked against fresh configuration under the lock' (-not $
 $null=Complete-ManualClassificationLearning -Result @{Action='keep';Name='项目';Remember=$true;Keyword='星河计划'} -FileName '星河计划_初稿.txt' -MovedPath $moved -Quiet
 Check 'A non-classification action never changes a rule' ((Digest) -eq $before)
 } catch {Check ('Unhandled test failure: '+$_.Exception.Message) $false; Write-Output $_.ScriptStackTrace}
-$report=@{Passed=@($script:checks | Where-Object Passed).Count;Failed=@($script:checks | Where-Object {-not $_.Passed}).Count;Checks=@($script:checks.ToArray());Scratch=$run}
+Check 'The source installation configuration is unchanged' ((Get-SourceStateHash (Join-Path $SourceDir 'config.json')) -eq $sourceConfigHash)
+Check 'The source installation deletion gate is unchanged' ((Get-SourceStateHash (Join-Path $SourceDir 'tests\verified.json')) -eq $sourceGateHash)
+function Remove-LearningTestNode([string]$Path){
+    $item=Get-Item -LiteralPath $Path -Force -ErrorAction Stop
+    if($item.PSIsContainer){
+        if(($item.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0){foreach($child in @(Get-ChildItem -LiteralPath $Path -Force)){Remove-LearningTestNode $child.FullName}}
+        [IO.Directory]::Delete($Path)
+    }else{[IO.File]::Delete($Path)}
+}
+$removed=$false
+try{
+    $fullRun=[IO.Path]::GetFullPath($run).TrimEnd('\')
+    $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\')
+    if([IO.Path]::GetDirectoryName($fullRun) -ne $tempBase -or [IO.Path]::GetFileName($fullRun) -notmatch '^nailong-learning-[a-f0-9]{32}$'){throw 'Refusing to clean an unrecognized learning fixture directory.'}
+    Remove-LearningTestNode $fullRun
+    $removed=-not [IO.Directory]::Exists($fullRun)
+}catch{Check ('Learning fixture cleanup failed: '+$_.Exception.Message) $false}
+Check 'Temporary learning fixtures are removed after checks' $removed
+$report=@{Passed=@($script:checks | Where-Object Passed).Count;Failed=@($script:checks | Where-Object {-not $_.Passed}).Count;Checks=@($script:checks.ToArray());Scratch=$run;ScratchRemoved=$removed;ProductionConfigurationUnchanged=((Get-SourceStateHash (Join-Path $SourceDir 'config.json')) -eq $sourceConfigHash);ProductionGateUnchanged=((Get-SourceStateHash (Join-Path $SourceDir 'tests\verified.json')) -eq $sourceGateHash)}
 if(-not $Output){$Output=Join-Path $PSScriptRoot 'learning-results.json'}
 [IO.File]::WriteAllText($Output,($report|ConvertTo-Json -Depth 5),[Text.Encoding]::UTF8)
 Write-Output ('TOTAL passed='+$report.Passed+' failed='+$report.Failed)
