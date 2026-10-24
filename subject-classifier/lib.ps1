@@ -182,5 +182,7 @@ function Set-RoundedRegion {
 }
 . (Join-Path $PSScriptRoot 'classification.ps1')
 . (Join-Path $PSScriptRoot 'operations.ps1')
+. (Join-Path $PSScriptRoot 'index-content.ps1')
 . (Join-Path $PSScriptRoot 'index-store.ps1')
+. (Join-Path $PSScriptRoot 'index-monitor.ps1')
 . (Join-Path $PSScriptRoot 'features.ps1')

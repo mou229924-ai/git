@@ -29,10 +29,23 @@ function Start-TrayApp {
     $notify.Visible = $true
 
     $timer = New-Object System.Windows.Forms.Timer
-    $timer.Interval = [int]$script:Cfg.pollSeconds * 1000
+    $timer.Interval=500
+    $script:NextClassificationScan=[datetime]::MinValue; $script:ClassificationDirty=$false
+    $script:NextClassificationReconcile=[datetime]::MinValue
+    Start-IndexChangeMonitor
     $timer.Add_Tick({
         try {
-            if (-not $script:Ui.Paused) { Scan-Once }
+            $changes=Flush-IndexChangeMonitor
+            $now=Get-Date
+            $pending=($script:States.Count -gt 0 -or $script:FolderStates.Count -gt 0)
+            $retryDue=@($script:Defer.Values | Where-Object {$_ -le $now}).Count -gt 0
+            if($changes -gt 0){$script:ClassificationDirty=$true}
+            if(-not $script:Ui.Paused -and $now -ge $script:NextClassificationScan -and ($script:ClassificationDirty -or $pending -or $retryDue -or $now -ge $script:NextClassificationReconcile)){
+                Scan-Once
+                $script:ClassificationDirty=$false
+                $script:NextClassificationScan=$now.AddSeconds([Math]::Max(1,[int]$script:Cfg.pollSeconds))
+                $script:NextClassificationReconcile=$now.AddSeconds(30)
+            }
         } catch [System.TimeoutException] {
             # A short library mutation is in progress; the next tick retries fairly.
         } catch {
@@ -110,5 +123,5 @@ function Start-TrayApp {
 
     $timer.Start()
     $notify.ShowBalloonTip(5000, $title, [string]$script:Cfg.tray.started, [System.Windows.Forms.ToolTipIcon]::Info)
-    [System.Windows.Forms.Application]::Run($script:Context)
+    try{[System.Windows.Forms.Application]::Run($script:Context)}finally{Stop-IndexChangeMonitor;$timer.Dispose();$notify.Dispose()}
 }

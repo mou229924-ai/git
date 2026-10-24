@@ -3,6 +3,7 @@ $script:SearchJob=$null; $script:DedupeJob=$null; $script:IndexJob=$null
 $script:PreviewJob=$null; $script:PreviewPath=''; $script:PreviewPage=0
 $script:SearchAgain=$false; $script:ListUpdating=$false; $script:DedupeDialogOpen=$false
 $script:LastAutoScan=Get-Date
+$script:PageOffset=0; $script:PageSize=200; $script:LastIndexPoll=[datetime]::MinValue; $script:LastReconcile=[datetime]::MinValue; $script:IndexSignature=0
 $jobsDirectory=Join-Path $script:AppDir '_jobs'
 New-Item -ItemType Directory -Path $jobsDirectory -Force | Out-Null
 if (-not ('Nailong.Native' -as [type])) { Add-Type -Path (Join-Path $PSScriptRoot 'NativePreview.cs') -ReferencedAssemblies System.Windows.Forms,System.Drawing }
@@ -72,6 +73,8 @@ function Update-FilePreview {
 }
 
 function Invoke-Search {
+    param([switch]$KeepPage)
+    if(-not $KeepPage){$script:PageOffset=0}
     if ($script:SearchJob) { $script:SearchAgain=$true; return }
     $directory=''
     if ($cmbSubject.SelectedIndex -gt 0) { $directory=[string]$cmbSubject.SelectedItem }
@@ -83,7 +86,7 @@ function Invoke-Search {
         3 {$extensions=@('.txt','.md','.csv','.tsv')} 4 {$extensions=@('.png','.jpg','.jpeg','.gif','.bmp')}
         5 {$extensions=@('.zip','.rar','.7z')}
     }
-    $script:SearchJob=Start-LibraryJob @{ Task='search'; Query=$txtQuery.Text.Trim(); Directory=$directory; Content=$chkContent.Checked; Since=$since.ToString('o'); Extensions=$extensions; SortKey=$script:SortKey; Descending=$script:SortDescending }
+    $script:SearchJob=Start-LibraryJob @{ Task='search'; Query=$txtQuery.Text.Trim(); Directory=$directory; Content=$chkContent.Checked; Since=$since.ToString('o'); Extensions=$extensions; SortKey=$script:SortKey; Descending=$script:SortDescending; Offset=$script:PageOffset; Limit=$script:PageSize }
     $lblStatus.Text='正在更新文件列表…'
     $addressLabel.Text='资料库  ›  '+$(if($directory){$directory.Replace('\','  ›  ')}else{'全部文件'})
 }
@@ -113,7 +116,14 @@ function Show-SearchResults {
             if ($selected -contains [string]$result.full) { $item.Selected=$true }
         }
     } finally { $list.EndUpdate(); $script:ListUpdating=$false }
-    $lblStatus.Text=$list.Items.Count.ToString()+' 个结果   ·   资料库共 '+$Data.Total+' 个文件'
+    $total=[int]$Data.TotalMatches
+    $offset=[int]$Data.Offset
+    if($total -gt 0 -and $offset -ge $total){$script:PageOffset=[int]([Math]::Floor(($total-1)/$script:PageSize)*$script:PageSize);Invoke-Search -KeepPage;return}
+    $first=0; if($total -gt 0){$first=$offset+1}
+    $last=$offset+$list.Items.Count
+    $lblStatus.Text=('显示 {0}–{1} / 共 {2} 个结果   ·   资料库 {3} 个文件' -f $first,$last,$total,$Data.TotalIndexed)
+    $pageInfo.Text=('第 {0} / {1} 页' -f ([int][Math]::Floor($offset/$script:PageSize)+1),[Math]::Max(1,[Math]::Ceiling($total/[double]$script:PageSize)))
+    $pagePreviousButton.Enabled=$offset -gt 0; $pageNextButton.Enabled=[bool]$Data.HasMore
     if ($list.SelectedItems.Count) { Update-FilePreview }
     elseif ($script:PreviewPath -and -not [IO.File]::Exists($script:PreviewPath)) { Stop-FilePreview; $previewTitle.Text='预览'; $previewText.Text='选择一个文件以预览。'; $previewText.Visible=$true }
     $available=$list.ClientSize.Width-(S 25)
@@ -288,8 +298,9 @@ $refreshTimer.Add_Tick({
             $task=$job.Task;$automatic=$job.Auto;Close-LibraryJob $job
             if($state.State -eq 'failed'){$lblStatus.Text='操作未完成：'+$state.Error;if($kind -eq 'DedupeJob'){$dedupeProgress.Visible=$false;$cancelScan.Visible=$false};continue}
             switch($task){
-                'search'{if($script:SearchAgain){$script:SearchAgain=$false;Invoke-Search}else{Show-SearchResults $state.Data}}
-                'rebuild'{$lblStatus.Text='索引已更新';Invoke-Search}
+                'search'{if($script:SearchAgain){$script:SearchAgain=$false;Invoke-Search -KeepPage}else{Show-SearchResults $state.Data}}
+                'rebuild'{$lblStatus.Text='索引已更新';Invoke-Search -KeepPage}
+                'index'{if($state.Data.Changed){Invoke-Search -KeepPage}}
                 'scan'{
                     $dedupeProgress.Visible=$false;$cancelScan.Visible=$false;$plan=@($state.Data.Plan)
                     if($automatic){if($plan.Count){$script:DedupeJob=Start-LibraryJob @{Task='cleanup';Plan=$plan};$dedupeProgress.Visible=$true}}
@@ -324,7 +335,21 @@ $refreshTimer.Add_Tick({
             if(-not $fallback){Show-FilePreview $file $page -Fallback}else{$previewText.Visible=$true;$previewText.Text='预览响应较慢，请用默认应用打开。'}
         }
     }
-    if(((Get-Date)-$script:LastSearchRefresh).TotalSeconds -gt 12 -and -not $script:SearchJob -and -not $script:UiUpdating){$script:LastSearchRefresh=Get-Date;Invoke-Search;Update-NavigationTree}
+    if(((Get-Date)-$script:LastIndexPoll).TotalSeconds -ge 2 -and -not $script:UiUpdating){
+        $script:LastIndexPoll=Get-Date
+        $changed=Flush-IndexChangeMonitor
+        $reconcile=((Get-Date)-$script:LastReconcile).TotalSeconds -ge 300
+        $changeDir=Join-Path $script:IndexDir 'changes'
+        $queued=(Test-Path -LiteralPath $changeDir) -and @(Get-ChildItem -LiteralPath $changeDir -Filter '*.json' -File | Select-Object -First 1).Count -gt 0
+        if(-not $script:IndexJob -and ($changed -gt 0 -or $queued -or $reconcile -or -not [IO.File]::Exists($script:IndexManifest))){
+            $script:IndexJob=Start-LibraryJob @{Task='index'}
+            if($reconcile){$script:LastReconcile=Get-Date}
+        }
+        if([IO.File]::Exists($script:IndexManifest)){
+            $signature=(Get-Item -LiteralPath $script:IndexManifest).LastWriteTimeUtc.Ticks
+            if($signature -ne $script:IndexSignature){$script:IndexSignature=$signature;Invoke-Search -KeepPage;Update-NavigationTree}
+        }
+    }
     if(((Get-Date)-$script:LastGateRefresh).TotalSeconds -gt 15){
         $script:LastGateRefresh=Get-Date
         $valid=Test-DedupeVerified
@@ -335,8 +360,8 @@ $refreshTimer.Add_Tick({
 })
 if(-not $SelfTestForm){$refreshTimer.Start()}
 $form.Add_FormClosing({param($sender,$eventArgs)if($script:DedupeJob -and $script:DedupeJob.Task -eq 'cleanup'){$eventArgs.Cancel=$true;$lblStatus.Text='副本回收尚未完成，请稍后关闭。'}})
-$form.Add_FormClosed({$previewDelay.Stop();$previewDelay.Dispose();Stop-FilePreview;Cancel-DuplicateScan;Close-LibraryJob $script:SearchJob -Stop;Close-LibraryJob $script:IndexJob -Stop;$fileIcons.Dispose()})
-$form.Add_Shown({Invoke-Search})
+$form.Add_FormClosed({Stop-IndexChangeMonitor;$previewDelay.Stop();$previewDelay.Dispose();Stop-FilePreview;Cancel-DuplicateScan;Close-LibraryJob $script:SearchJob -Stop;Close-LibraryJob $script:IndexJob -Stop;$fileIcons.Dispose()})
+$form.Add_Shown({Start-IndexChangeMonitor})
 
 $autoCheck.Add_CheckedChanged({if($autoCheck.Checked){$script:LastAutoScan=(Get-Date).AddSeconds(-31)}else{Cancel-DuplicateScan}})
 
@@ -437,9 +462,17 @@ $tree.Add_AfterSelect({param($sender,$e)if([string]$e.Node.Tag){$scopeLabel.Text
 $resultCard=New-Object Nailong.RoundSurface
 $resultCard.Dock='Fill';$resultCard.Fill=[Drawing.Color]::White;$resultCard.Stroke=[Drawing.Color]::FromArgb(239,235,224);$resultCard.Radius=(S 18)
 $resultCard.Padding=New-Object Windows.Forms.Padding((S 16),(S 10),(S 16),(S 12));$resultCard.Margin=New-Object Windows.Forms.Padding(0,0,0,(S 4));$rootLayout.Controls.Add($resultCard,0,4)
-$resultLayout=New-Object Windows.Forms.TableLayoutPanel;$resultLayout.Dock='Fill';$resultLayout.RowCount=2;$resultLayout.ColumnCount=1;$resultLayout.BackColor=[Drawing.Color]::White
+$resultLayout=New-Object Windows.Forms.TableLayoutPanel;$resultLayout.Dock='Fill';$resultLayout.RowCount=3;$resultLayout.ColumnCount=1;$resultLayout.BackColor=[Drawing.Color]::White
 [void]$resultLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Absolute',(S 44))));[void]$resultLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Percent',100)))
 $resultCard.Controls.Add($resultLayout)
+[void]$resultLayout.RowStyles.Add((New-Object Windows.Forms.RowStyle('Absolute',(S 36))))
+$pageBar=New-Object Windows.Forms.FlowLayoutPanel; $pageBar.Dock='Fill'; $pageBar.FlowDirection='RightToLeft'; $pageBar.WrapContents=$false; $pageBar.BackColor=[Drawing.Color]::White
+$pageNextButton=New-Object Windows.Forms.Button; $pageNextButton.Text='下一页'; $pageNextButton.Width=(S 84); $pageNextButton.Enabled=$false
+$pagePreviousButton=New-Object Windows.Forms.Button; $pagePreviousButton.Text='上一页'; $pagePreviousButton.Width=(S 84); $pagePreviousButton.Enabled=$false
+$pageInfo=New-Object Windows.Forms.Label; $pageInfo.Text='第 1 / 1 页'; $pageInfo.AutoSize=$true; $pageInfo.Margin=New-Object Windows.Forms.Padding((S 12),(S 7),(S 12),0)
+$pageBar.Controls.AddRange(@($pageNextButton,$pageInfo,$pagePreviousButton)); $resultLayout.Controls.Add($pageBar,0,2)
+$pageNextButton.Add_Click({$script:PageOffset+=$script:PageSize;Invoke-Search -KeepPage})
+$pagePreviousButton.Add_Click({$script:PageOffset=[Math]::Max(0,$script:PageOffset-$script:PageSize);Invoke-Search -KeepPage})
 $resultHeader=New-Object Windows.Forms.Panel;$resultHeader.Dock='Fill';$resultHeader.BackColor=[Drawing.Color]::White;$resultLayout.Controls.Add($resultHeader,0,0)
 $resultHeading=New-Object Windows.Forms.Label;$resultHeading.Text='全部资料';$resultHeading.AutoSize=$true;$resultHeading.Font=New-Object Drawing.Font('Microsoft YaHei UI',12,[Drawing.FontStyle]::Bold);$resultHeading.ForeColor=$script:ColText;$resultHeading.Location=New-Object Drawing.Point((S 5),(S 9));$resultHeader.Controls.Add($resultHeading)
 $resultActions=New-Object Windows.Forms.FlowLayoutPanel;$resultActions.AutoSize=$true;$resultActions.WrapContents=$false;$resultActions.BackColor=[Drawing.Color]::White;$resultHeader.Controls.Add($resultActions)

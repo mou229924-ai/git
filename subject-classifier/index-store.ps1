@@ -50,11 +50,10 @@ function Load-IndexEntries {
 function Save-IndexEntries {
     param($Entries)
     Initialize-IndexFolders
-    $json = ConvertTo-Json -InputObject ([object[]]@($Entries)) -Depth 5
-    if (-not [IO.File]::Exists($script:IndexManifest) -or [IO.File]::ReadAllText($script:IndexManifest, $script:Utf8) -ne $json) {
-        Write-AtomicUtf8 -Path $script:IndexManifest -Text $json
-    }
-    $script:SearchTextCache = @{}
+    $json = ConvertTo-Json -InputObject ([object[]]@($Entries)) -Depth 5 -Compress
+    $changed = (-not [IO.File]::Exists($script:IndexManifest) -or (Read-AtomicUtf8 $script:IndexManifest) -ne $json)
+    if ($changed) { Write-AtomicUtf8 -Path $script:IndexManifest -Text $json; $script:SearchTextCache=@{}; $script:IndexTextCacheBytes=0 }
+    return $changed
 }
 
 function Invoke-IndexLock {
@@ -91,32 +90,36 @@ function New-IndexCandidate {
     $rel = Get-RelativePath $File.FullName
     if (-not $rel -or -not (Test-FileReady $File.FullName)) { return $null }
     if (-not $TextProvided) { $Text = Get-FileText -Path $File.FullName -Max ([int]$script:Cfg.indexMaxChars) }
+    $hasText = -not [string]::IsNullOrWhiteSpace($Text)
+    $body = $null
+    if ($hasText) { $body = New-IndexContentData $Text }
     return [pscustomobject]@{
         Entry = [pscustomobject]@{
             id=(Get-IndexId $rel); rel=$rel; name=$File.Name; subject=(Get-SubjectFromRelPath $rel)
             size=[long]$File.Length; mtime=$File.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
-            mtimeTicks=[long]$File.LastWriteTime.Ticks; hasText=(-not [string]::IsNullOrWhiteSpace($Text))
+            mtimeTicks=[long]$File.LastWriteTime.Ticks; hasText=$hasText; textKey=[string]$body.Key
         }
-        Text = $Text
+        CacheBytes = $body.Bytes
     }
 }
 
 function Commit-IndexCandidates {
-    param([object[]]$Candidates, [string[]]$RemovePaths = @(), [switch]$Reconcile)
-    # Parsing and walking happen before this mutex. Re-read the current snapshot so
-    # a late writer never erases documents committed by another process.
+    param([object[]]$Candidates, [string[]]$RemovePaths = @(), [switch]$Reconcile, [switch]$PruneCache, [switch]$FullReconcile)
     Invoke-IndexLock {
         Initialize-IndexFolders
         $current = @{}
+        $deferred = New-Object Collections.ArrayList
         foreach ($entry in @(Load-IndexEntries)) { $current[[string]$entry.rel] = $entry }
         foreach ($candidate in $Candidates) {
             if (-not $candidate) { continue }
             $entry = $candidate.Entry
             $full = Join-Path $script:Root ([string]$entry.rel)
             $actual = Get-IndexSourceItem $full
-            if (-not $actual -or $actual.PSIsContainer -or [long]$actual.Length -ne [long]$entry.size -or
-                [long]$actual.LastWriteTime.Ticks -ne [long]$entry.mtimeTicks) { continue }
-            if ($entry.hasText) { Write-AtomicUtf8 (Join-Path $script:IndexDataDir ($entry.id + '.txt')) ([string]$candidate.Text) }
+            if (-not $actual) { continue }
+            if ([long]$actual.Length -ne [long]$entry.size -or [long]$actual.LastWriteTime.Ticks -ne [long]$entry.mtimeTicks) {
+                [void]$deferred.Add($full); continue
+            }
+            Write-IndexContentData $candidate
             $current[[string]$entry.rel] = $entry
         }
         $remove = @($RemovePaths)
@@ -127,31 +130,115 @@ function Commit-IndexCandidates {
             if ((Get-RelativePath $full) -and -not (Get-IndexSourceItem $full)) { $current.Remove($rel) }
         }
         $entries = @($current.Values | Sort-Object rel)
-        Save-IndexEntries -Entries $entries
-        return @{ Total=$entries.Count; WithText=@($entries | Where-Object hasText).Count }
+        $changed = Save-IndexEntries -Entries $entries
+        if ($FullReconcile) {
+            $state = @{ Schema=2; SourceRoot=[IO.Path]::GetFullPath($script:Root); LastFullUtc=[datetime]::UtcNow.ToString('o') }
+            Write-AtomicUtf8 (Join-Path $script:IndexDir 'state.json') ($state | ConvertTo-Json -Compress)
+        }
+        $pruned=0
+        if ($PruneCache) { $pruned=Remove-OrphanIndexContent -Entries $entries }
+        return @{ Total=$entries.Count; WithText=@($entries | Where-Object hasText).Count; Changed=[bool]$changed; Deferred=@($deferred.ToArray()); Pruned=$pruned; FullReconcile=[bool]$FullReconcile; Busy=$false }
     }
 }
 
 function Sync-LibraryIndex {
-    param([scriptblock]$Progress, [switch]$Force)
+    param([scriptblock]$Progress, [switch]$Force, [switch]$Incremental)
     Initialize-IndexFolders
-    $old = @{}
-    foreach ($entry in @(Load-IndexEntries)) { $old[[string]$entry.rel] = $entry }
-    $files = @(Get-LibraryFiles)
-    $candidates = New-Object Collections.ArrayList
-    $i = 0
-    foreach ($file in $files) {
-        $i++
-        if ($Progress) { & $Progress $i $files.Count $file.Name }
-        $rel = Get-RelativePath $file.FullName
-        $previous = $old[$rel]
-        if (-not $Force -and $previous -and [long]$previous.size -eq $file.Length -and
-            [long]$previous.mtimeTicks -eq $file.LastWriteTime.Ticks -and
-            (-not $previous.hasText -or [IO.File]::Exists((Join-Path $script:IndexDataDir ($previous.id + '.txt'))))) { continue }
-        $candidate = New-IndexCandidate -File $file
-        if ($candidate) { [void]$candidates.Add($candidate) }
-    }
-    return Commit-IndexCandidates -Candidates $candidates.ToArray() -Reconcile
+    $null = Flush-IndexChangeMonitor
+    $maintenanceId = Get-IndexId -RelPath ([IO.Path]::GetFullPath($script:IndexDir))
+    $maintenance = New-Object Threading.Mutex($false, ('Local\SubjectIndexMaintenance_' + $maintenanceId))
+    $owned = $false
+    try {
+        try { $wait=30000; if ($Incremental) { $wait=0 }; $owned=$maintenance.WaitOne($wait) } catch [Threading.AbandonedMutexException] { $owned=$true }
+        if (-not $owned) {
+            $snapshot=@(Load-IndexEntries)
+            return @{ Total=$snapshot.Count; WithText=@($snapshot | Where-Object hasText).Count; Changed=$false; Busy=$true; FullReconcile=$false }
+        }
+        $old = @{}
+        foreach ($entry in @(Load-IndexEntries)) { $old[[string]$entry.rel] = $entry }
+        $full = (-not $Incremental -or $Force -or -not [IO.File]::Exists($script:IndexManifest))
+        $statePath = Join-Path $script:IndexDir 'state.json'
+        $rootChanged=$false
+        try {
+            $state = (Read-AtomicUtf8 $statePath) | ConvertFrom-Json
+            $rootChanged=([string]$state.SourceRoot -ne [IO.Path]::GetFullPath($script:Root))
+            if ($rootChanged -or ([datetime]::UtcNow - ([datetime]$state.LastFullUtc).ToUniversalTime()).TotalMinutes -ge 5) { $full=$true }
+        } catch { $full=$true }
+        $queueDir=Join-Path $script:IndexDir 'changes'
+        $batches=@()
+        $paths=@{}
+        if ([IO.Directory]::Exists($queueDir)) {
+            $batches=@(Get-ChildItem -LiteralPath $queueDir -File -Filter '*.json' -ErrorAction SilentlyContinue | Where-Object { -not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint) })
+            foreach ($batch in $batches) {
+                try {
+                    $change=(Read-AtomicUtf8 $batch.FullName) | ConvertFrom-Json
+                    if ($change.Full) { $full=$true }
+                    foreach ($path in $change.Paths) {
+                        if ($path -and (Get-RelativePath ([string]$path))) { $paths[[IO.Path]::GetFullPath([string]$path)]=$true }
+                    }
+                } catch { $full=$true }
+            }
+        }
+        if (-not $full -and $paths.Count -eq 0 -and $batches.Count -eq 0) {
+            return @{ Total=$old.Count; WithText=@($old.Values | Where-Object hasText).Count; Changed=$false; Busy=$false; FullReconcile=$false }
+        }
+        $fileMap=@{}
+        $remove=@{}
+        if ($full) {
+            foreach ($file in @(Get-LibraryFiles)) { $fileMap[$file.FullName]=$file }
+        } else {
+            foreach ($path in $paths.Keys) {
+                $rel=Get-RelativePath $path
+                $remove[$rel]=$true
+                foreach ($existingRel in $old.Keys) {
+                    if ($existingRel.StartsWith($rel.TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase)) { $remove[$existingRel]=$true }
+                }
+                $file=Get-IndexSourceItem $path
+                if ($file) { $fileMap[$file.FullName]=$file; continue }
+                if ([IO.Directory]::Exists($path)) {
+                    $directory=Get-Item -LiteralPath $path -Force -ErrorAction SilentlyContinue
+                    $relativeParent=Get-RelativePath $path
+                    if ($directory -and -not ($directory.Attributes -band [IO.FileAttributes]::ReparsePoint) -and
+                        $relativeParent -notmatch '(?:^|\\)[._]' -and
+                        -not $path.StartsWith([IO.Path]::GetFullPath($script:AppDir).TrimEnd('\')+'\',[StringComparison]::OrdinalIgnoreCase) -and
+                        $path -ne [IO.Path]::GetFullPath($script:AppDir).TrimEnd('\')) {
+                        foreach ($nested in @(Get-LibraryFiles -Directory $path)) { $fileMap[$nested.FullName]=$nested }
+                    }
+                }
+            }
+        }
+        $candidates=New-Object Collections.ArrayList
+        $deferred=New-Object Collections.ArrayList
+        $files=@($fileMap.Values)
+        $i=0
+        foreach ($file in $files) {
+            $i++
+            if ($Progress) { & $Progress $i $files.Count $file.Name }
+            $rel=Get-RelativePath $file.FullName
+            $previous=$old[$rel]
+            $unchanged=(-not $Force -and -not $rootChanged -and $previous -and [long]$previous.size -eq $file.Length -and [long]$previous.mtimeTicks -eq $file.LastWriteTime.Ticks)
+            $legacyText=$null
+            if ($unchanged) {
+                if (-not $previous.hasText) { continue }
+                $cachePath=Get-IndexContentPath $previous
+                if ($cachePath -and [IO.File]::Exists($cachePath)) {
+                    if ($previous.textKey) { continue }
+                    # Old plain-text bodies migrate without opening or reparsing documents.
+                    $legacyText=Read-IndexContentText $previous
+                }
+            }
+            if ($null -ne $legacyText) { $candidate=New-IndexCandidate -File $file -Text $legacyText -TextProvided }
+            else { $candidate=New-IndexCandidate -File $file }
+            if ($candidate) { [void]$candidates.Add($candidate) }
+            elseif ([IO.File]::Exists($file.FullName)) { [void]$deferred.Add($file.FullName) }
+        }
+        $result=Commit-IndexCandidates -Candidates $candidates.ToArray() -RemovePaths @($remove.Keys) -Reconcile:$full -PruneCache:$full -FullReconcile:$full
+        # Only batches observed before this scan are acknowledged. New events survive.
+        foreach ($batch in $batches) { if ([IO.File]::Exists($batch.FullName)) { [IO.File]::Delete($batch.FullName) } }
+        $retry=@($deferred.ToArray())+@($result.Deferred)
+        if ($retry.Count) { Request-IndexRefresh -Paths $retry }
+        return $result
+    } finally { if ($owned) { $maintenance.ReleaseMutex() }; $maintenance.Dispose() }
 }
 
 function Rebuild-Index {
@@ -182,9 +269,12 @@ function Search-Index {
         [datetime]$ModifiedSince = [datetime]::MinValue,
         [string[]]$Extensions = @(),
         [string]$SortKey = 'score',
-        [bool]$Descending = $true
+        [bool]$Descending = $true,
+        [ValidateRange(0,2147483647)][int]$Offset = 0,
+        [switch]$AsPage
     )
-    $script:SearchTextCache = @{}
+    $lease = Open-IndexReadLease
+    try {
     $entries = @(Load-IndexEntries)
     $terms = @()
     if (-not [string]::IsNullOrWhiteSpace($Query)) {
@@ -193,7 +283,6 @@ function Search-Index {
     $results = New-Object System.Collections.ArrayList
     foreach ($e in $entries) {
         $full = Join-Path $script:Root ([string]$e.rel)
-        if (-not (Test-Path -LiteralPath $full)) { continue }
         if ($Subject -eq [string]$script:Cfg.search.unclassified) {
             if ([string]$e.rel -match '\\') { continue }
         } elseif ($Subject -and -not ([string]$e.rel).StartsWith($Subject.TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)) { continue }
@@ -217,18 +306,7 @@ function Search-Index {
         }
 
         $text = $null
-        if ($IncludeContent -and [bool]$e.hasText) {
-            $id = [string]$e.id
-            if ($script:SearchTextCache.ContainsKey($id)) {
-                $text = $script:SearchTextCache[$id]
-            } else {
-                $tp = Join-Path $script:IndexDataDir ($id + '.txt')
-                if (Test-Path -LiteralPath $tp) {
-                    $text = (Read-AtomicUtf8 $tp)
-                    $script:SearchTextCache[$id] = $text
-                }
-            }
-        }
+        if ($IncludeContent -and [bool]$e.hasText) { $text=Read-IndexContentText $e }
 
         $score = 0
         $allFound = $true
@@ -282,6 +360,16 @@ function Search-Index {
     }
 
     if (@('score','mtimeTicks','name','size','rel') -notcontains $SortKey) { $SortKey='score' }
-    return @($results | Sort-Object -Property @{ Expression = { $_.$SortKey }; Descending = $Descending }, @{ Expression = { $_.mtimeTicks }; Descending = $true }, name | Select-Object -First $Limit)
+    $sorted=@($results | Sort-Object -Property @{ Expression = { $_.$SortKey }; Descending = $Descending }, @{ Expression = { $_.mtimeTicks }; Descending = $true }, name)
+    $total=$sorted.Count
+    $take=$Limit
+    if ($take -le 0) { $take=[Math]::Max(0,$total-$Offset) }
+    $page=@()
+    if ($Offset -lt $total -and $take -gt 0) { $page=@($sorted | Select-Object -Skip $Offset -First $take) }
+    if ($AsPage) {
+        return [pscustomobject]@{ Results=[object[]]$page; TotalMatches=$total; TotalIndexed=$entries.Count; Offset=$Offset; Limit=$take; HasMore=(($Offset+$page.Count) -lt $total); Total=$entries.Count }
+    }
+    return $page
+    } finally { Close-IndexReadLease $lease }
 }
 

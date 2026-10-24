@@ -56,7 +56,7 @@ $dropAction = {
         if ($success) { Ensure-LibraryWatcher }
         $lblStatus.Text = '已移入 ' + $success + ' 个文件，后台将自动分类；跳过 ' + $errors.Count + ' 个。'
         if ($errors.Count) { [void][Windows.Forms.MessageBox]::Show((($errors | ForEach-Object { [IO.Path]::GetFileName($_.Source) + '：' + $_.Error }) -join "`r`n"),'部分文件未导入') }
-        $null = Sync-LibraryIndex
+        Request-IndexRefresh -Paths @($result | Where-Object Success | ForEach-Object Target)
         Invoke-Search
     } catch { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'导入失败') }
     finally { $script:UiUpdating = $false; $refreshTimer.Start() }

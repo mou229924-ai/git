@@ -27,6 +27,8 @@ Verify 'Background scanner detects the isolated duplicate correctly' ($plan.Coun
 $cleanup=Run-Worker @{Task='cleanup';Plan=$plan}
 Verify 'Background cleanup reports one recycled copy' ($cleanup.State -eq 'done' -and @($cleanup.Data.Outcomes|Where-Object Status -eq 'recycled').Count -eq 1)
 Verify 'Background cleanup preserves the retained file exactly' ((Test-Path -LiteralPath $keep) -and (Get-FileHash -LiteralPath $keep -Algorithm SHA256).Hash -eq $before -and -not (Test-Path -LiteralPath $duplicate))
+$index=Run-Worker @{Task='index'}
+Verify 'Background index update completes before snapshot search' ($index.State -eq 'done')
 $search=Run-Worker @{Task='search';Query='async-task-fixture';Directory='后台测试';Content=$true;Since=[datetime]::MinValue.ToString('o');Extensions=@('.txt');SortKey='mtimeTicks';Descending=$true}
 Verify 'Background search combines directory, content and format filters' ($search.State -eq 'done' -and @($search.Data.Results).Count -eq 1 -and $search.Data.Results[0].full -eq $keep)
 $invalid=Run-Worker @{Task='invalid-operation'}

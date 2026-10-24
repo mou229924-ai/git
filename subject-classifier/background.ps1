@@ -10,9 +10,21 @@ try {
     Report-Job 'running' @{ Done=0; Total=0 }
     switch ([string]$requestData.Task) {
         'search' {
-            $null=Sync-LibraryIndex
-            $results=@(Search-Index -Query ([string]$requestData.Query) -Subject ([string]$requestData.Directory) -IncludeContent ([bool]$requestData.Content) -Limit 3000 -ModifiedSince ([datetime]$requestData.Since) -Extensions @($requestData.Extensions) -SortKey ([string]$requestData.SortKey) -Descending ([bool]$requestData.Descending))
-            Report-Job 'done' @{ Results=$results; Total=@(Load-IndexEntries).Count }
+            $limit=200
+            if ($requestData.PSObject.Properties['Limit']) { $limit=[int]$requestData.Limit }
+            $page=Search-Index -Query ([string]$requestData.Query) -Subject ([string]$requestData.Directory) -IncludeContent ([bool]$requestData.Content) -Limit $limit -Offset ([int]$requestData.Offset) -AsPage -ModifiedSince ([datetime]$requestData.Since) -Extensions @($requestData.Extensions) -SortKey ([string]$requestData.SortKey) -Descending ([bool]$requestData.Descending)
+            Report-Job 'done' $page
+        }
+        'index' {
+            $script:LastIndexProgress=[datetime]::MinValue
+            $data=Sync-LibraryIndex -Incremental -Force:([bool]$requestData.Force) -Progress {
+                param($done,$total,$name)
+                if ($done -eq $total -or ([datetime]::UtcNow-$script:LastIndexProgress).TotalMilliseconds -ge 150) {
+                    Report-Job 'running' @{ Done=$done; Total=$total; Name=$name }
+                    $script:LastIndexProgress=[datetime]::UtcNow
+                }
+            }
+            Report-Job 'done' $data
         }
         'scan' {
             $plan=@(Find-DuplicateDocuments -Progress { param($done,$total) Report-Job 'running' @{ Done=$done; Total=$total } })

@@ -196,7 +196,7 @@ $list.Add_ItemDrag({
         $data.SetData('Preferred DropEffect',$effectStream)
         # Explorer performs the move. Never delete the source again after DoDragDrop returns.
         $null=$list.DoDragDrop($data,[Windows.Forms.DragDropEffects]::Move)
-        $null=Sync-LibraryIndex; Invoke-Search
+        Request-IndexRefresh -Paths $paths; Invoke-Search
     } catch { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'拖出文件') }
     finally { if ($effectStream) { $effectStream.Dispose() }; $script:UiUpdating=$false; $refreshTimer.Start() }
 })

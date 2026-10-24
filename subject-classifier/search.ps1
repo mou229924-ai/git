@@ -168,11 +168,6 @@ function Format-Size {
     return ([string]$Size + ' B')
 }
 
-function Get-IndexableFiles {
-    $appFull = [System.IO.Path]::GetFullPath($script:AppDir).TrimEnd('\')
-    return @(Get-ChildItem -LiteralPath $script:Root -Recurse -File -Force -ErrorAction SilentlyContinue | Where-Object { -not $_.FullName.StartsWith($appFull + '\', [System.StringComparison]::OrdinalIgnoreCase) })
-}
-
 function Update-Stats {
     if (Get-Command Update-DirectoryChoices -ErrorAction SilentlyContinue) { Update-DirectoryChoices }
     $entries = @(Load-IndexEntries)
@@ -623,9 +618,6 @@ $form.AcceptButton = $btnSearch
 
 $form.Add_Shown({
     Update-Stats
-    if (@(Load-IndexEntries).Count -eq 0) {
-        if ((Get-IndexableFiles).Count -gt 0) { Invoke-Rebuild -Auto }
-    }
     Invoke-Search
 })
 

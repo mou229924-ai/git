@@ -1,6 +1,8 @@
 [
   "app-runtime.ps1",
   "lib.ps1",
+  "index-monitor.ps1",
+  "index-content.ps1",
   "index-store.ps1",
   "operations.ps1",
   "classification.ps1",

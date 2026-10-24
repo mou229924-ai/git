@@ -25,7 +25,8 @@ function Test-LibraryName {
 
 function Rename-LibraryFile {
     param([string]$Path,[string]$NewName)
-    Invoke-LibraryLock {
+    $oldRel=Get-RelativePath $Path
+    $renamed=Invoke-LibraryLock {
         $source = Assert-LibraryFile $Path
         if (-not (Test-LibraryName $NewName)) { throw '文件名包含无效字符或保留名称。' }
         if (Test-IgnoredDocument $NewName) { throw '不能重命名为临时文件。' }
@@ -35,9 +36,10 @@ function Rename-LibraryFile {
         if (-not (Test-FileReady $source)) { throw '文件正在使用，请关闭后重试。' }
         [IO.File]::Move($source,$target)
         Write-Log ('RENAMED  ' + $source + ' -> ' + $target)
-        $null = Sync-LibraryIndex
         return $target
     }
+    $null=Update-IndexEntry -FilePath $renamed -OldRelPath $oldRel
+    return $renamed
 }
 
 function Save-LibraryDirectory {
@@ -124,7 +126,7 @@ function Invoke-BatchPrint {
 
 function Export-LibraryFiles {
     param([string[]]$Paths,[string]$Destination)
-    Invoke-LibraryLock {
+    $outcomes=@(Invoke-LibraryLock {
         if (-not (Test-Path -LiteralPath $Destination -PathType Container)) { throw '目标文件夹不存在。' }
         if (Get-RelativePath (Join-Path $Destination 'probe.txt')) { throw '此入口仅用于移出资料库。' }
         foreach ($path in $Paths) {
@@ -141,8 +143,9 @@ function Export-LibraryFiles {
                 [pscustomobject]@{ Source=$source; Target=$target; Success=$true; Error='' }
             } catch { [pscustomobject]@{ Source=$path; Target=''; Success=$false; Error=$_.Exception.Message } }
         }
-        $null=Sync-LibraryIndex
-    }
+    })
+    foreach($outcome in $outcomes){if($outcome.Success){$null=Update-IndexEntry -FilePath $outcome.Source}}
+    return $outcomes
 }
 
 function Set-WarmControls {
