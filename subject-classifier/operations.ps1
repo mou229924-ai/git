@@ -1,12 +1,17 @@
-﻿# Shared operations. All index writers and file movers use the same per-library lock.
+﻿# File mutations use a short per-library lock. Index commits have a separate mutex.
 function Invoke-LibraryLock {
-    param([scriptblock]$Action, [int]$Timeout = 30000)
+    param([scriptblock]$Action, [int]$Timeout = 30000, [switch]$SkipIfBusy)
     $id = Get-IndexId -RelPath ([IO.Path]::GetFullPath($script:Root))
     $mutex = New-Object Threading.Mutex($false, ('Local\SubjectLibrary_' + $id))
     $owned = $false
     try {
         try { $owned = $mutex.WaitOne($Timeout) } catch [Threading.AbandonedMutexException] { $owned = $true }
-        if (-not $owned) { throw '资料库正在处理文件，请稍后重试。' }
+        if (-not $owned) {
+            if ($SkipIfBusy) { return $null }
+            $busy = New-Object System.TimeoutException('资料库正在处理文件，请稍后重试。')
+            $busy.Data['LibraryBusy'] = $true
+            throw $busy
+        }
         & $Action
     } finally { if ($owned) { $mutex.ReleaseMutex() }; $mutex.Dispose() }
 }
@@ -82,7 +87,6 @@ function Test-StreamsEqual {
 
 function Find-DuplicateDocuments {
     param([scriptblock]$Progress)
-    Invoke-LibraryLock {
         $scanFiles=@(Get-LibraryFiles | Sort-Object FullName)
         $scanIndex=0
         $lastProgress=[datetime]::MinValue
@@ -100,7 +104,6 @@ function Find-DuplicateDocuments {
                 [pscustomobject]@{ Keep=$groups[$key]; Duplicate=$file.FullName; Hash=$hash; Size=[long]$file.Length }
             } catch { Write-Log ('DEDUPE SCAN SKIP  ' + $file.FullName + '  ' + $_.Exception.Message) }
         }
-    }
 }
 
 function Assert-LibraryDocument {

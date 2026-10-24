@@ -11,6 +11,7 @@ function Initialize-ClassifierState {
     $script:FolderStates = @{}
     $script:FolderSkip = @{}
     $script:Busy = $false
+    $script:LastScanBusyCount = 0
     $script:Ui = @{ Paused = $false }
 
     if (-not $script:Cfg.processExistingOnStartup) {
@@ -24,60 +25,51 @@ function Initialize-ClassifierState {
 function Move-ToSubject {
     param($FileInfo, [string]$Folder, [string]$Reason, [string]$Text, [switch]$TextProvided)
     $name = $Folder
-    foreach ($ch in [System.IO.Path]::GetInvalidFileNameChars()) {
-        $name = $name.Replace([string]$ch, '_')
-    }
+    foreach ($ch in [IO.Path]::GetInvalidFileNameChars()) { $name = $name.Replace([string]$ch, '_') }
     $name = $name.Trim().TrimEnd('.')
     if ([string]::IsNullOrWhiteSpace($name)) { $name = [string]$script:Cfg.otherFolderName }
-    $destDir = Join-Path $script:Root $name
-    if (-not (Test-Path -LiteralPath $destDir)) {
-        New-Item -ItemType Directory -Path $destDir -Force | Out-Null
-    }
-    $target = Join-Path $destDir $FileInfo.Name
-    if (Test-Path -LiteralPath $target) {
-        $baseName = [System.IO.Path]::GetFileNameWithoutExtension($FileInfo.Name)
-        $ext = [System.IO.Path]::GetExtension($FileInfo.Name)
-        $i = 2
-        while (Test-Path -LiteralPath $target) {
-            $target = Join-Path $destDir ($baseName + ' (' + [string]$i + ')' + $ext)
-            $i = $i + 1
+    if (-not (Test-LibraryName $name)) { throw '目录名包含无效字符或保留名称。' }
+    # Capture the enumeration snapshot before waiting. Never classify a file that changed while a dialog was open.
+    $expectedLength = [long]$FileInfo.Length
+    $expectedTime = [long]$FileInfo.LastWriteTimeUtc.Ticks
+    $sourcePath = [string]$FileInfo.FullName
+    $oldRel = Get-RelativePath -FilePath $sourcePath
+    $target = Invoke-LibraryLock -Timeout 250 {
+        if (-not (Test-Path -LiteralPath $sourcePath -PathType Leaf)) { throw (New-Object IO.IOException('文件已由其他操作移动，稍后刷新。')) }
+        $source = Assert-LibraryFile $sourcePath
+        $current = Get-Item -LiteralPath $source -Force -ErrorAction Stop
+        if ($current.Length -ne $expectedLength -or $current.LastWriteTimeUtc.Ticks -ne $expectedTime) {
+            throw (New-Object IO.IOException('文件在分类期间发生变化，稍后重新识别。'))
         }
+        if (-not (Test-FileReady $source)) { throw (New-Object IO.IOException('文件仍在使用，稍后重试。')) }
+        $destDir = Join-Path $script:Root $name
+        if ((Test-Path -LiteralPath $destDir) -and ((Get-Item -LiteralPath $destDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw '不能将文件移动到目录链接。'
+        }
+        if (-not (Test-Path -LiteralPath $destDir)) { New-Item -ItemType Directory -Path $destDir -Force | Out-Null }
+        $destination = Get-UniquePath -Path (Join-Path $destDir $FileInfo.Name)
+        Move-Item -LiteralPath $source -Destination $destination -ErrorAction Stop
+        return $destination
     }
-    $oldRel = Get-RelativePath -FilePath $FileInfo.FullName
-    if (-not (Test-FileReady $FileInfo.FullName)) { throw '文件仍在使用，稍后重试。' }
-    Move-Item -LiteralPath $FileInfo.FullName -Destination $target -ErrorAction Stop
     Write-Log ('MOVED  ' + $FileInfo.Name + '  ->  ' + $name + '  [' + $Reason + ']')
-    if ($TextProvided) {
-        Update-IndexEntry -FilePath $target -Text $Text -TextProvided -OldRelPath $oldRel
-    } else {
-        Update-IndexEntry -FilePath $target -OldRelPath $oldRel
-    }
+    # Indexing has its own lock. Text extraction and index work never keep the library mutation lock.
+    if ($TextProvided) { Update-IndexEntry -FilePath $target -Text $Text -TextProvided -OldRelPath $oldRel }
+    else { Update-IndexEntry -FilePath $target -OldRelPath $oldRel }
     return $target
 }
 
 function Save-NewSubject {
     param([string]$Name)
-    Refresh-LibraryConfig
-    $script:IgnoreNames += $Name
-    if (-not $script:Cfg.saveNewSubjects) { return }
-    try {
-        foreach ($rule in $script:Cfg.subjects) {
-            if ([string]$rule.name -eq $Name) { return }
-        }
-        $newRule = New-Object PSObject -Property @{
-            name = $Name
-            filenameKeywords = @($Name)
-            contentKeywords = @($Name)
-        }
-        $list = New-Object System.Collections.ArrayList
-        foreach ($rule in $script:Cfg.subjects) { [void]$list.Add($rule) }
-        [void]$list.Add($newRule)
-        $script:Cfg.subjects = @($list.ToArray())
-        $json = $script:Cfg | ConvertTo-Json -Depth 12
-        Write-AtomicUtf8 -Path $script:ConfigPath -Text $json
+    if (-not (Test-LibraryName $Name)) { throw '目录名包含无效字符或保留名称。' }
+    Invoke-LibraryLock -Timeout 250 {
+        Refresh-LibraryConfig
+        $script:IgnoreNames += $Name
+        if (-not $script:Cfg.saveNewSubjects) { return }
+        foreach ($rule in $script:Cfg.subjects) { if ([string]$rule.name -eq $Name) { return } }
+        $newRule = [pscustomobject]@{ name=$Name; filenameKeywords=@($Name); contentKeywords=@($Name) }
+        $script:Cfg.subjects = @($script:Cfg.subjects) + @($newRule)
+        Write-AtomicUtf8 -Path $script:ConfigPath -Text ($script:Cfg | ConvertTo-Json -Depth 12)
         Write-Log ('CONFIG  added subject: ' + $Name)
-    } catch {
-        Write-Log ('CONFIG  save failed: ' + $_.Exception.Message)
     }
 }
 
@@ -140,61 +132,74 @@ function Get-ContextSubject {
 }
 
 function Index-FilesUnder {
-    param([string]$Path)
+    param([string]$Path, [string]$OldBasePath = '')
     $files = @()
-    if (Test-Path -LiteralPath $Path -PathType Container) {
-        $files = @(Get-ChildItem -LiteralPath $Path -Recurse -File -Force -ErrorAction SilentlyContinue)
-    } elseif (Test-Path -LiteralPath $Path -PathType Leaf) {
-        $files = @(Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue)
-    }
+    if (Test-Path -LiteralPath $Path -PathType Container) { $files = @(Get-DropFolderFiles $Path) }
+    elseif (Test-Path -LiteralPath $Path -PathType Leaf) { $files = @(Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue) }
     $i = 0
     foreach ($f in $files) {
-        $i = $i + 1
+        $i++
         Update-ProgressForm -Index $i -Total $files.Count -Name $f.Name
-        Update-IndexEntry -FilePath $f.FullName
+        $oldRel = ''
+        if ($OldBasePath) {
+            $suffix = $f.FullName.Substring(([IO.Path]::GetFullPath($Path)).TrimEnd('\').Length).TrimStart('\')
+            $oldRel = Get-RelativePath (Join-Path $OldBasePath $suffix)
+        }
+        Update-IndexEntry -FilePath $f.FullName -OldRelPath $oldRel
     }
 }
 
 function Remove-EmptyDirs {
     param([string]$Dir)
-    try {
-        foreach ($child in @(Get-ChildItem -LiteralPath $Dir -Directory -Force -ErrorAction SilentlyContinue)) {
-            Remove-EmptyDirs -Dir $child.FullName
-        }
-        $items = @(Get-ChildItem -LiteralPath $Dir -Force -ErrorAction SilentlyContinue)
-        if ($items.Count -eq 0) {
-            Remove-Item -LiteralPath $Dir -Force -ErrorAction SilentlyContinue
-        }
-    } catch {
+    if (-not (Get-RelativePath $Dir)) { return }
+    # Cleanup only empty ordinary directories, with each deletion serialized against other file movers.
+    foreach ($child in @(Get-ChildItem -LiteralPath $Dir -Directory -Force -ErrorAction SilentlyContinue)) {
+        if (($child.Attributes -band [IO.FileAttributes]::ReparsePoint) -eq 0) { Remove-EmptyDirs -Dir $child.FullName }
     }
+    try {
+        Invoke-LibraryLock -Timeout 250 {
+            if (-not (Test-Path -LiteralPath $Dir -PathType Container)) { return }
+            $current = Get-Item -LiteralPath $Dir -Force -ErrorAction Stop
+            if ($current.Attributes -band [IO.FileAttributes]::ReparsePoint) { return }
+            if (@(Get-ChildItem -LiteralPath $Dir -Force -ErrorAction Stop).Count -eq 0) {
+                Remove-Item -LiteralPath $Dir -Force -ErrorAction Stop
+            }
+        }
+    } catch [System.TimeoutException] { } catch [IO.IOException] { }
 }
 
 function Move-DroppedFolderWhole {
     param($Dir, [string]$Subject)
+    if (-not (Test-LibraryName $Subject)) { throw '目录名包含无效字符或保留名称。' }
+    $sourceDir = [IO.Path]::GetFullPath($Dir.FullName).TrimEnd('\')
     $subjectDir = Join-Path $script:Root $Subject
-    if (-not (Test-Path -LiteralPath $subjectDir)) {
-        New-Item -ItemType Directory -Path $subjectDir -Force | Out-Null
-    }
-    if ($Dir.Name -eq $Subject) {
-        $children = @(Get-ChildItem -LiteralPath $Dir.FullName -Force -ErrorAction SilentlyContinue)
-        $i = 0
-        foreach ($child in $children) {
-            $i = $i + 1
-            Update-ProgressForm -Index $i -Total $children.Count -Name $child.Name
-            $target = Join-Path $subjectDir $child.Name
-            if (Test-Path -LiteralPath $target) { $target = Get-UniquePath -Path $target }
-            Move-Item -LiteralPath $child.FullName -Destination $target -ErrorAction Stop
-            Index-FilesUnder -Path $target
+    if ($sourceDir.Equals([IO.Path]::GetFullPath($subjectDir).TrimEnd('\'), [StringComparison]::OrdinalIgnoreCase)) { return }
+    if (-not (Get-RelativePath $sourceDir)) { throw '文件夹不在资料库内。' }
+    $snapshot = @(Get-DropFolderFiles $sourceDir | ForEach-Object {
+        [pscustomobject]@{ Path=$_.FullName; Size=[long]$_.Length; Time=[long]$_.LastWriteTimeUtc.Ticks }
+    })
+    $target = Invoke-LibraryLock -Timeout 250 {
+        $folder = Get-Item -LiteralPath $sourceDir -Force -ErrorAction Stop
+        if (-not $folder.PSIsContainer -or ($folder.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw '不能分类目录链接。' }
+        $currentFiles = @(Get-DropFolderFiles $sourceDir)
+        if ($currentFiles.Count -ne $snapshot.Count) { throw (New-Object IO.IOException('文件夹内容仍在变化，稍后重试。')) }
+        foreach ($entry in $snapshot) {
+            $path = Assert-LibraryFile $entry.Path
+            $current = Get-Item -LiteralPath $path -Force -ErrorAction Stop
+            if ($current.Length -ne $entry.Size -or $current.LastWriteTimeUtc.Ticks -ne $entry.Time -or -not (Test-FileReady $path)) {
+                throw (New-Object IO.IOException('文件夹内容仍在变化，稍后重试。'))
+            }
         }
-        Remove-Item -LiteralPath $Dir.FullName -Force -ErrorAction SilentlyContinue
-        Write-Log ('FOLDER MERGED  ' + $Dir.Name + '  ->  ' + $Subject)
-    } else {
-        $target = Join-Path $subjectDir $Dir.Name
-        if (Test-Path -LiteralPath $target) { $target = Get-UniquePath -Path $target }
-        Move-Item -LiteralPath $Dir.FullName -Destination $target -ErrorAction Stop
-        Index-FilesUnder -Path $target
-        Write-Log ('FOLDER MOVED  ' + $Dir.Name + '  ->  ' + $Subject)
+        if ((Test-Path -LiteralPath $subjectDir) -and ((Get-Item -LiteralPath $subjectDir -Force).Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+            throw '不能将文件夹移动到目录链接。'
+        }
+        if (-not (Test-Path -LiteralPath $subjectDir)) { New-Item -ItemType Directory -Path $subjectDir -Force | Out-Null }
+        $destination = Get-UniquePath -Path (Join-Path $subjectDir $Dir.Name)
+        Move-Item -LiteralPath $sourceDir -Destination $destination -ErrorAction Stop
+        return $destination
     }
+    Index-FilesUnder -Path $target -OldBasePath $sourceDir
+    Write-Log ('FOLDER MOVED  ' + $Dir.Name + '  ->  ' + $Subject)
 }
 
 function Process-DroppedFolderFiles {
@@ -202,6 +207,7 @@ function Process-DroppedFolderFiles {
     $files = @(Get-DropFolderFiles $Dir.FullName)
     $total = $files.Count
     $i = 0
+    $retryNeeded = $false
     foreach ($f in $files) {
         $i = $i + 1
         Update-ProgressForm -Index $i -Total $total -Name $f.Name
@@ -210,7 +216,8 @@ function Process-DroppedFolderFiles {
         if ($script:Skip.ContainsKey($f.FullName) -and $script:Skip[$f.FullName] -eq $sig) { continue }
 
         if (Test-IgnoredDocument $f.FullName) { continue }
-        if (-not (Test-FileReady $f.FullName)) { continue }
+        if (-not (Test-FileReady $f.FullName)) { $retryNeeded = $true; continue }
+        if ($script:LastScanBusyCount -gt 0) { $retryNeeded = $true; continue }
         try {
             $context = Get-ContextSubject -FilePath $f.FullName -StopDir $Dir.FullName
             $classification = Get-DocumentClassification -Path $f.FullName -Context $context
@@ -257,10 +264,16 @@ function Process-DroppedFolderFiles {
                     Write-Log ('KEPT (folder)  ' + $f.FullName)
                 }
             }
+        } catch [System.TimeoutException] {
+            $script:LastScanBusyCount++
+            $retryNeeded = $true
+        } catch [IO.IOException] {
+            $retryNeeded = $true
         } catch {
             Write-Log ('FOLDER FILE ERROR  ' + $f.FullName + '  ' + $_.Exception.Message)
         }
     }
+    if ($retryNeeded) { throw (New-Object IO.IOException('资料库繁忙，文件夹稍后重试。')) }
     Remove-EmptyDirs -Dir $Dir.FullName
     Write-Log ('FOLDER PROCESSED  ' + $Dir.Name + '  files=' + [string]$total)
 }
@@ -268,8 +281,8 @@ function Process-DroppedFolderFiles {
 function Process-DroppedFolder {
     param($Dir)
     foreach ($file in @(Get-DropFolderFiles $Dir.FullName)) {
-        if ($file.Name -match '^~|(?i)\.tmp(?:\.|$)' -or @($script:Cfg.ignoreExtensions) -contains $file.Extension.ToLowerInvariant()) { throw '文件夹内仍有临时文件，等待保存或复制完成。' }
-        if (-not (Test-IgnoredDocument $file.FullName) -and -not (Test-FileReady $file.FullName)) { throw '文件夹内有文件正在使用，稍后重试。' }
+        if ($file.Name -match '^~|(?i)\.tmp(?:\.|$)' -or @($script:Cfg.ignoreExtensions) -contains $file.Extension.ToLowerInvariant()) { throw (New-Object IO.IOException('文件夹内仍有临时文件，等待保存或复制完成。')) }
+        if (-not (Test-IgnoredDocument $file.FullName) -and -not (Test-FileReady $file.FullName)) { throw (New-Object IO.IOException('文件夹内有文件正在使用，稍后重试。')) }
     }
     Show-ProgressForm
     try {
@@ -287,8 +300,8 @@ function Process-DroppedFolder {
 function Scan-Once {
     if ($script:Busy) { return }
     $script:Busy = $true
+    $script:LastScanBusyCount = 0
     try {
-      Invoke-LibraryLock -Timeout 0 {
         Refresh-LibraryConfig
         try {
             $files = @(Get-ChildItem -LiteralPath $script:Root -File -Force -ErrorAction SilentlyContinue)
@@ -328,6 +341,8 @@ function Scan-Once {
             }
             if ($st.Count -lt [int]$script:Cfg.stablePolls) { continue }
             if (-not (Test-FileReady -Path $fi.FullName)) { continue }
+            # One bounded contention wait per scan; subsequent candidates keep their stable state for the next turn.
+            if ($script:LastScanBusyCount -gt 0) { continue }
 
             try {
                 $classification = Get-DocumentClassification -Path $fi.FullName
@@ -387,6 +402,13 @@ function Scan-Once {
                         }
                     }
                 }
+            } catch [System.TimeoutException] {
+                $script:LastScanBusyCount++
+                $script:Defer[$key] = (Get-Date).AddSeconds([Math]::Max(1, [int]$script:Cfg.pollSeconds))
+                continue
+            } catch [IO.IOException] {
+                $script:Defer[$key] = (Get-Date).AddSeconds([Math]::Max(1, [int]$script:Cfg.pollSeconds))
+                continue
             } catch {
                 Write-Log ('ERROR  ' + $fi.Name + '  ' + $_.Exception.Message)
             }
@@ -415,6 +437,7 @@ function Scan-Once {
             $dirs = @()
         }
         foreach ($dir in $dirs) {
+            if ($script:LastScanBusyCount -gt 0) { break }
             $dn = $dir.Name
             if ($dn.StartsWith('_') -or $dn.StartsWith('.')) { continue }
             if (($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }
@@ -434,6 +457,11 @@ function Scan-Once {
             if ($fst.Count -lt [int]$script:Cfg.stablePolls) { continue }
             try {
                 Process-DroppedFolder -Dir $dir
+            } catch [System.TimeoutException] {
+                $script:LastScanBusyCount++
+                continue
+            } catch [IO.IOException] {
+                continue
             } catch {
                 Write-Log ('FOLDER ERROR  ' + $dn + '  ' + $_.Exception.Message)
                 continue
@@ -459,7 +487,6 @@ function Scan-Once {
             }
             foreach ($k in $removeSkips) { $script:FolderSkip.Remove($k) }
         }
-      }
     } finally {
         $script:Busy = $false
     }

@@ -33,6 +33,8 @@ function Start-TrayApp {
     $timer.Add_Tick({
         try {
             if (-not $script:Ui.Paused) { Scan-Once }
+        } catch [System.TimeoutException] {
+            # A short library mutation is in progress; the next tick retries fairly.
         } catch {
             Write-Log ('TICK ERROR  ' + $_.Exception.Message)
         }

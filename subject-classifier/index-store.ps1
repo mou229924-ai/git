@@ -57,46 +57,101 @@ function Save-IndexEntries {
     $script:SearchTextCache = @{}
 }
 
+function Invoke-IndexLock {
+    param([scriptblock]$Action, [int]$Timeout = 30000)
+    $id = Get-IndexId -RelPath ([IO.Path]::GetFullPath($script:IndexDir))
+    $mutex = New-Object Threading.Mutex($false, ('Local\SubjectIndex_' + $id))
+    $owned = $false
+    try {
+        try { $owned = $mutex.WaitOne($Timeout) } catch [Threading.AbandonedMutexException] { $owned = $true }
+        if (-not $owned) { throw (New-Object System.TimeoutException('索引正在更新，请稍后重试。')) }
+        & $Action
+    } finally { if ($owned) { $mutex.ReleaseMutex() }; $mutex.Dispose() }
+}
+
+function Get-IndexSourceItem {
+    param([string]$Path)
+    if (-not (Get-RelativePath $Path) -or (Test-IgnoredDocument $Path)) { return $null }
+    $file = Get-Item -LiteralPath $Path -Force -ErrorAction SilentlyContinue
+    if (-not $file -or $file.PSIsContainer -or ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $null }
+    $rootFull = [IO.Path]::GetFullPath($script:Root).TrimEnd('\')
+    $appFull = [IO.Path]::GetFullPath($script:AppDir).TrimEnd('\')
+    $cursor = $file.Directory
+    while ($cursor -and $cursor.FullName -ne $rootFull) {
+        if ($cursor.Name -match '^[._]' -or $cursor.FullName -eq $appFull -or
+            ($cursor.Attributes -band [IO.FileAttributes]::ReparsePoint)) { return $null }
+        $cursor = $cursor.Parent
+    }
+    if (-not $cursor) { return $null }
+    return $file
+}
+
+function New-IndexCandidate {
+    param($File, [string]$Text, [switch]$TextProvided)
+    $rel = Get-RelativePath $File.FullName
+    if (-not $rel -or -not (Test-FileReady $File.FullName)) { return $null }
+    if (-not $TextProvided) { $Text = Get-FileText -Path $File.FullName -Max ([int]$script:Cfg.indexMaxChars) }
+    return [pscustomobject]@{
+        Entry = [pscustomobject]@{
+            id=(Get-IndexId $rel); rel=$rel; name=$File.Name; subject=(Get-SubjectFromRelPath $rel)
+            size=[long]$File.Length; mtime=$File.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
+            mtimeTicks=[long]$File.LastWriteTime.Ticks; hasText=(-not [string]::IsNullOrWhiteSpace($Text))
+        }
+        Text = $Text
+    }
+}
+
+function Commit-IndexCandidates {
+    param([object[]]$Candidates, [string[]]$RemovePaths = @(), [switch]$Reconcile)
+    # Parsing and walking happen before this mutex. Re-read the current snapshot so
+    # a late writer never erases documents committed by another process.
+    Invoke-IndexLock {
+        Initialize-IndexFolders
+        $current = @{}
+        foreach ($entry in @(Load-IndexEntries)) { $current[[string]$entry.rel] = $entry }
+        foreach ($candidate in $Candidates) {
+            if (-not $candidate) { continue }
+            $entry = $candidate.Entry
+            $full = Join-Path $script:Root ([string]$entry.rel)
+            $actual = Get-IndexSourceItem $full
+            if (-not $actual -or $actual.PSIsContainer -or [long]$actual.Length -ne [long]$entry.size -or
+                [long]$actual.LastWriteTime.Ticks -ne [long]$entry.mtimeTicks) { continue }
+            if ($entry.hasText) { Write-AtomicUtf8 (Join-Path $script:IndexDataDir ($entry.id + '.txt')) ([string]$candidate.Text) }
+            $current[[string]$entry.rel] = $entry
+        }
+        $remove = @($RemovePaths)
+        if ($Reconcile) { $remove = @($current.Keys) }
+        foreach ($rel in $remove) {
+            if ([string]::IsNullOrWhiteSpace($rel)) { continue }
+            $full = Join-Path $script:Root $rel
+            if ((Get-RelativePath $full) -and -not (Get-IndexSourceItem $full)) { $current.Remove($rel) }
+        }
+        $entries = @($current.Values | Sort-Object rel)
+        Save-IndexEntries -Entries $entries
+        return @{ Total=$entries.Count; WithText=@($entries | Where-Object hasText).Count }
+    }
+}
+
 function Sync-LibraryIndex {
     param([scriptblock]$Progress, [switch]$Force)
-    Invoke-LibraryLock {
-        Initialize-IndexFolders
-        $old = @{}
-        foreach ($entry in @(Load-IndexEntries)) { $old[[string]$entry.rel] = $entry }
-        $files = @(Get-LibraryFiles)
-        $entries = New-Object Collections.ArrayList
-        $withText = 0
-        $i = 0
-        foreach ($file in $files) {
-            $i++
-            if ($Progress) { & $Progress $i $files.Count $file.Name }
-            $rel = Get-RelativePath $file.FullName
-            $id = Get-IndexId $rel
-            $textPath = Join-Path $script:IndexDataDir ($id + '.txt')
-            $previous = $old[$rel]
-            if (-not $Force -and $previous -and [long]$previous.size -eq $file.Length -and
-                [long]$previous.mtimeTicks -eq $file.LastWriteTime.Ticks -and
-                (-not $previous.hasText -or [IO.File]::Exists($textPath))) {
-                [void]$entries.Add($previous)
-                if ($previous.hasText) { $withText++ }
-                continue
-            }
-            if (-not (Test-FileReady $file.FullName)) {
-                if ($previous) { [void]$entries.Add($previous); if ($previous.hasText) { $withText++ } }
-                continue
-            }
-            $text = Get-FileText -Path $file.FullName -Max ([int]$script:Cfg.indexMaxChars)
-            $hasText = -not [string]::IsNullOrWhiteSpace($text)
-            if ($hasText) { Write-AtomicUtf8 $textPath $text; $withText++ }
-            [void]$entries.Add([pscustomobject]@{
-                id=$id; rel=$rel; name=$file.Name; subject=(Get-SubjectFromRelPath $rel)
-                size=[long]$file.Length; mtime=$file.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
-                mtimeTicks=[long]$file.LastWriteTime.Ticks; hasText=$hasText
-            })
-        }
-        Save-IndexEntries -Entries $entries.ToArray()
-        return @{ Total=$entries.Count; WithText=$withText }
+    Initialize-IndexFolders
+    $old = @{}
+    foreach ($entry in @(Load-IndexEntries)) { $old[[string]$entry.rel] = $entry }
+    $files = @(Get-LibraryFiles)
+    $candidates = New-Object Collections.ArrayList
+    $i = 0
+    foreach ($file in $files) {
+        $i++
+        if ($Progress) { & $Progress $i $files.Count $file.Name }
+        $rel = Get-RelativePath $file.FullName
+        $previous = $old[$rel]
+        if (-not $Force -and $previous -and [long]$previous.size -eq $file.Length -and
+            [long]$previous.mtimeTicks -eq $file.LastWriteTime.Ticks -and
+            (-not $previous.hasText -or [IO.File]::Exists((Join-Path $script:IndexDataDir ($previous.id + '.txt'))))) { continue }
+        $candidate = New-IndexCandidate -File $file
+        if ($candidate) { [void]$candidates.Add($candidate) }
     }
+    return Commit-IndexCandidates -Candidates $candidates.ToArray() -Reconcile
 }
 
 function Rebuild-Index {
@@ -106,8 +161,16 @@ function Rebuild-Index {
 
 function Update-IndexEntry {
     param([string]$FilePath, [string]$Text, [switch]$TextProvided, [string]$OldRelPath)
-    # Reconcile actual files under the lock; stale snapshots never overwrite another writer.
-    $null = Sync-LibraryIndex
+    $rel = Get-RelativePath $FilePath
+    if (-not $rel) { return }
+    $file = Get-IndexSourceItem $FilePath
+    $candidates = @()
+    if ($file -and -not $file.PSIsContainer -and -not (Test-IgnoredDocument $FilePath) -and
+        -not ($file.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+        $candidate = New-IndexCandidate -File $file -Text $Text -TextProvided:$TextProvided
+        if ($candidate) { $candidates = @($candidate) }
+    }
+    $null = Commit-IndexCandidates -Candidates $candidates -RemovePaths @($rel, $OldRelPath)
 }
 
 function Search-Index {
