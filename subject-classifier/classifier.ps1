@@ -3,7 +3,11 @@
     [switch]$EnsureRunning,
     [switch]$SelfTestForm,
     [string]$Inspect,
-    [string]$CaptureDialog = ''
+    [string]$CaptureDialog = '',
+    [int]$OwnerProcessId=0,
+    [long]$OwnerStartTicks=0,
+    [string]$ControlPath='',
+    [string]$ControlToken=''
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,6 +66,8 @@ if (-not (Test-Path -LiteralPath $script:Root)) {
 }
 
 Initialize-ClassifierState
+$script:OwnerProcessId=$OwnerProcessId; $script:OwnerStartTicks=$OwnerStartTicks
+$script:ControlPath=$ControlPath; $script:ControlToken=$ControlToken; $script:LastWatcherStatus=[datetime]::MinValue
 
 
 Write-Log 'watcher started (tray, folders, index)'

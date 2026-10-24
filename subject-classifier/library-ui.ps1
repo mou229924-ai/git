@@ -3,8 +3,7 @@ $script:AutoDedupe = $false
 $script:LastLibrarySignature = ''
 
 function Ensure-LibraryWatcher {
-    $scriptPath = Join-Path $script:AppDir 'classifier.ps1'
-    Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList ('-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "' + $scriptPath + '" -EnsureRunning')
+    Start-ManagedLibraryWatcher
 }
 
 $btnDuplicates = New-RoundButton -Text '查找重复' -Kind 'text'

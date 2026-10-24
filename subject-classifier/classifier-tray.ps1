@@ -26,7 +26,7 @@ function Start-TrayApp {
         $notify.Icon = [System.Drawing.SystemIcons]::Application
     }
     $notify.Text = [string]$script:Cfg.tray.text
-    $notify.Visible = $true
+    $notify.Visible = (-not $script:OwnerProcessId)
 
     $timer = New-Object System.Windows.Forms.Timer
     $timer.Interval=500
@@ -34,6 +34,7 @@ function Start-TrayApp {
     $script:NextClassificationReconcile=[datetime]::MinValue
     Start-IndexChangeMonitor
     $timer.Add_Tick({
+        if(-not (Update-ManagedWatcherControl)){$script:Context.ExitThread();return}
         try {
             $changes=Flush-IndexChangeMonitor
             $now=Get-Date
@@ -122,6 +123,6 @@ function Start-TrayApp {
     }.GetNewClosure())
 
     $timer.Start()
-    $notify.ShowBalloonTip(5000, $title, [string]$script:Cfg.tray.started, [System.Windows.Forms.ToolTipIcon]::Info)
+    if(-not $script:OwnerProcessId){$notify.ShowBalloonTip(5000, $title, [string]$script:Cfg.tray.started, [System.Windows.Forms.ToolTipIcon]::Info)}
     try{[System.Windows.Forms.Application]::Run($script:Context)}finally{Flush-ApplicationLogs -Force;Stop-IndexChangeMonitor;$timer.Dispose();$notify.Dispose()}
 }

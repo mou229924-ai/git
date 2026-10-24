@@ -33,7 +33,7 @@ try {
     $existing=[IO.File]::ReadAllText($configPath,$utf8) | ConvertFrom-Json
     if(-not $existing.inbox -or -not [IO.Path]::IsPathRooted([string]$existing.inbox)){throw '资料路径无效，请检查 config.json 的 inbox。'}
     if($Launch){& (Join-Path $app 'search.ps1')}
-    elseif($Listen){& (Join-Path $app 'classifier.ps1') -EnsureRunning}
+    elseif($Listen){& (Join-Path $app 'search.ps1')}
     else{Write-Output '资料库配置已就绪。'}
 } catch {
     if($NoPrompt){Write-Error $_.Exception.Message;exit 1}

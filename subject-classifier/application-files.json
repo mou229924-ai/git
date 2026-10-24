@@ -29,5 +29,8 @@
   "batch-ui.ps1",
   "environment.ps1",
   "tools/doctor.ps1",
-  "奶龙.code.cmd"
+  "奶龙.code.cmd",
+  "app-session.ps1",
+  "session-ui.ps1",
+  "tools/install-desktop.ps1"
 ]

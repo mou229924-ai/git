@@ -526,3 +526,5 @@ $txtQuery.Location=New-Object Drawing.Point((S 47),(S 15))
 Update-ResultColumnWidths
 
 . (Join-Path $PSScriptRoot 'batch-ui.ps1')
+
+. (Join-Path $PSScriptRoot 'session-ui.ps1')
