@@ -205,3 +205,11 @@ $txtQuery.Add_KeyDown({ param($sender,$eventArgs) if ($eventArgs.KeyCode -eq 'En
 Update-DirectoryChoices
 
 Set-WarmControls $form
+
+function Invoke-OcrRebuild {
+    if($script:IndexJob){$lblStatus.Text='索引正在更新，请完成后再识别扫描件。';return}
+    $capability=Get-OcrAvailability
+    if(-not $capability.Available){[void][Windows.Forms.MessageBox]::Show($form,$capability.Reason,'本机文字识别');return}
+    if([Windows.Forms.MessageBox]::Show($form,'启用本机文字识别并重建索引？默认识别每份 PDF 前两页及图片，资料不会上传。文件较多时需要一些时间。','识别扫描件文字','YesNo','Question') -ne 'Yes'){return}
+    try{Set-LibraryOcrEnabled $true;Invoke-Rebuild;$lblStatus.Text='正在后台识别并建立文字索引…'}catch{[void][Windows.Forms.MessageBox]::Show($form,$_.Exception.Message,'文字识别未启动')}
+}

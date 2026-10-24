@@ -21,5 +21,8 @@
   "NativePreview.cs",
   "VERSION",
   "setup.ps1",
-  "config.example.json"
+  "config.example.json",
+  "configuration.ps1",
+  "document-text.ps1",
+  "classification-learning.ps1"
 ]

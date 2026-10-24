@@ -62,7 +62,7 @@ function Show-SubjectDialog {
     $form.MinimizeBox = $false
     $form.ShowInTaskbar = $true
     $form.Width = (S 700)
-    $form.Height = (S 445)
+    $form.Height = (S 535)
     $form.BackColor = [System.Drawing.Color]::FromArgb(255, 249, 231)
     try { $form.Font = New-Object System.Drawing.Font('Microsoft YaHei UI', 10) } catch { }
     try {
@@ -71,12 +71,12 @@ function Show-SubjectDialog {
     } catch {
     }
 
-    $state = @{ Action = 'cancel'; Name = $null; Form = $form }
+    $state = @{ Action = 'cancel'; Name = $null; Remember = $false; Keyword = ''; Form = $form }
 
     $layout = New-Object System.Windows.Forms.TableLayoutPanel
     $layout.Dock = 'Fill'
     $layout.ColumnCount = 1
-    $layout.RowCount = 6
+    $layout.RowCount = 7
     $layout.Padding = New-Object System.Windows.Forms.Padding((S 12))
     [void]$layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
     [void]$layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
@@ -140,7 +140,37 @@ function Show-SubjectDialog {
     $bottom.FlowDirection = 'RightToLeft'
     $bottom.WrapContents = $false
     $bottom.Margin = New-Object System.Windows.Forms.Padding(0, (S 8), 0, 0)
-    $layout.Controls.Add($bottom, 0, 5)
+    $layout.Controls.Add($bottom, 0, 6)
+
+    # Rule learning is opt-in for each file. Editable suggestions never change configuration by themselves.
+    [void]$layout.RowStyles.Add((New-Object System.Windows.Forms.RowStyle([System.Windows.Forms.SizeType]::AutoSize)))
+    $learning = New-Object System.Windows.Forms.FlowLayoutPanel
+    $learning.AutoSize=$true; $learning.Dock='Fill'; $learning.FlowDirection='TopDown'; $learning.WrapContents=$false
+    $learning.Margin=New-Object System.Windows.Forms.Padding((S 2), (S 4), (S 2), 0)
+    $remember = New-Object System.Windows.Forms.CheckBox
+    $remember.Name='RememberClassificationKeyword'; $remember.AutoSize=$true; $remember.Checked=$false
+    $remember.Text='记住文件名关键词（仅对本次选择的已有目录生效）'
+    $learning.Controls.Add($remember)
+    $keyword = New-Object System.Windows.Forms.ComboBox
+    $keyword.Name='ClassificationKeyword'; $keyword.DropDownStyle='DropDown'; $keyword.Width=(S 630)
+    $keyword.MaxLength=60; $keyword.Enabled=$false
+    $stem=[IO.Path]::GetFileNameWithoutExtension($FileName)
+    if ($stem.Length -ge 2 -and $stem.Length -le 60) { [void]$keyword.Items.Add($stem); $keyword.Text=$stem }
+    foreach ($part in @($stem -split '[_\s()（）\[\]-]+' | Where-Object { $_.Length -ge 2 -and $_.Length -le 60 } | Select-Object -Unique)) {
+        if (-not $keyword.Items.Contains($part)) { [void]$keyword.Items.Add($part) }
+    }
+    $learning.Controls.Add($keyword)
+    $learningHint = New-Object System.Windows.Forms.Label
+    $learningHint.AutoSize=$true; $learningHint.MaximumSize=New-Object Drawing.Size((S 630),0)
+    $learningHint.Text='只记住你确认的文件名短语；未勾选不会修改规则。'
+    $learningHint.ForeColor=[Drawing.Color]::FromArgb(139,114,63)
+    $learning.Controls.Add($learningHint)
+    $remember.Add_CheckedChanged({
+        $keyword.Enabled=$remember.Checked
+        $learningHint.Text='只记住你确认的文件名短语；未勾选不会修改规则。'
+        if ($remember.Checked) { [void]$keyword.Focus() }
+    }.GetNewClosure())
+    $layout.Controls.Add($learning,0,5)
 
     $form.Controls.Add($layout)
 
@@ -163,6 +193,17 @@ function Show-SubjectDialog {
         $btn.Add_MouseLeave({ param($s, $e) $s.BackColor = $btnBase }.GetNewClosure())
         $btn.Add_SizeChanged({ param($s, $e) Set-RoundedRegion -Control $s -Radius (S 18) })
         $btn.Add_Click({
+            if ($remember.Checked) {
+                $validation=Test-ManualClassificationKeyword -Name $subjectName -Keyword $keyword.Text -FileName $FileName
+                if (-not $validation.Valid) {
+                    $learningHint.Text=$validation.Error
+                    $learningHint.ForeColor=[Drawing.Color]::FromArgb(190,66,44)
+                    [void]$keyword.Focus()
+                    return
+                }
+                $state.Remember=$true
+                $state.Keyword=$validation.Keyword
+            }
             $state.Action = 'subject'
             $state.Name = $subjectName
             $state.Form.Close()
@@ -275,7 +316,7 @@ function Show-SubjectDialog {
     } finally {
         $form.Dispose()
     }
-    return @{ Action = $state.Action; Name = $state.Name }
+    return @{ Action = $state.Action; Name = $state.Name; Remember = $state.Remember; Keyword = $state.Keyword }
 }
 
 $script:ProgressForm = $null

@@ -254,7 +254,9 @@ function Process-DroppedFolderFiles {
                     $folderName = [string]$result.Name
                     if ($result.Action -eq 'other') { $folderName = [string]$script:Cfg.otherFolderName }
                     if ($result.Action -eq 'new') { Save-NewSubject -Name $folderName }
-                    if ($attempted) {
+                    if ($result.Action -eq 'subject') {
+                        [void](Move-ManualSubjectSelection -FileInfo $f -Result $result -Text $text -TextProvided:$attempted)
+                    } elseif ($attempted) {
                         [void](Move-ToSubject -FileInfo $f -Folder $folderName -Reason 'manual' -Text $text -TextProvided)
                     } else {
                         [void](Move-ToSubject -FileInfo $f -Folder $folderName -Reason 'manual')
@@ -395,11 +397,7 @@ function Scan-Once {
                             [void](Move-ToSubject -FileInfo $fi -Folder $newName -Reason 'manual-new')
                         }
                     } elseif ($result.Action -eq 'subject') {
-                        if ($textAttempted) {
-                            [void](Move-ToSubject -FileInfo $fi -Folder ([string]$result.Name) -Reason 'manual' -Text $text -TextProvided)
-                        } else {
-                            [void](Move-ToSubject -FileInfo $fi -Folder ([string]$result.Name) -Reason 'manual')
-                        }
+                        [void](Move-ManualSubjectSelection -FileInfo $fi -Result $result -Text $text -TextProvided:$textAttempted)
                     }
                 }
             } catch [System.TimeoutException] {

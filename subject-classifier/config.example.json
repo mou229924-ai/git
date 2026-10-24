@@ -323,5 +323,12 @@
     "menuCopy": "复制路径",
     "ready": "就绪",
     "emptyIndex": "索引为空。"
+  },
+  "schemaVersion": 1,
+  "ocr": {
+    "enabled": false,
+    "maxPages": 2,
+    "maxFileMiB": 25,
+    "timeoutSeconds": 12
   }
 }

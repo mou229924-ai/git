@@ -211,3 +211,14 @@ function Show-NameInput {
     Set-WarmControls $dialog
     try { if ((Show-LibraryDialog -Dialog $dialog -Owner $Owner -InitialFocus $box) -eq 'OK') { return $box.Text }; return '' } finally { $dialog.Dispose() }
 }
+
+function Set-LibraryOcrEnabled {
+    param([bool]$Enabled)
+    Invoke-LibraryLock -Timeout 1500 {
+        $config=(Read-AtomicUtf8 $script:ConfigPath) | ConvertFrom-Json
+        if(-not $config.PSObject.Properties['ocr']){$config | Add-Member -NotePropertyName ocr -NotePropertyValue ([pscustomobject]@{enabled=$false;maxPages=2;maxFileMiB=25;timeoutSeconds=12})}
+        $config.ocr.enabled=$Enabled
+        Write-AtomicUtf8 $script:ConfigPath ($config | ConvertTo-Json -Depth 32)
+        $script:Cfg=$config
+    }
+}
