@@ -220,7 +220,7 @@ function Import-LibraryItems {
                 $source = Get-Item -LiteralPath $path -Force -ErrorAction Stop
                 if (Get-RelativePath $source.FullName) { throw '文件已在资料库内。' }
                 if (($source.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0 -or $source.PSIsContainer) {
-                    throw '请拖入普通文件；文件夹请直接放到分类根目录。'
+                    throw '请拖入普通文件；已有文件夹作为分类目录保留。'
                 }
                 if (Test-IgnoredDocument $source.FullName) { throw '临时文件不导入。' }
                 if (-not (Test-FileReady $source.FullName)) { throw '文件正在被使用，请关闭后重试。' }

@@ -13,6 +13,8 @@ function Initialize-ClassifierState {
     $script:Busy = $false
     $script:LastScanBusyCount = 0
     $script:Ui = @{ Paused = $false }
+    # Existing folders are user categories, regardless of whether they have keyword rules.
+    $script:ExistingCategoryDirectories=@(Get-ChildItem -LiteralPath $script:Root -Directory -Force -ErrorAction SilentlyContinue | Where-Object {-not ($_.Attributes -band [IO.FileAttributes]::ReparsePoint)} | ForEach-Object FullName)
 
     if (-not $script:Cfg.processExistingOnStartup) {
         foreach ($fi in @(Get-ChildItem -LiteralPath $script:Root -File -Force -ErrorAction SilentlyContinue)) {
@@ -437,6 +439,7 @@ function Scan-Once {
         }
         foreach ($dir in $dirs) {
             if ($script:LastScanBusyCount -gt 0) { break }
+            if(($script:Cfg.learning -and [bool]$script:Cfg.learning.enabled) -or $script:ExistingCategoryDirectories -contains $dir.FullName){continue}
             $dn = $dir.Name
             if ($dn.StartsWith('_') -or $dn.StartsWith('.')) { continue }
             if (($dir.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) { continue }

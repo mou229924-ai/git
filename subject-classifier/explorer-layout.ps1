@@ -528,3 +528,5 @@ Update-ResultColumnWidths
 . (Join-Path $PSScriptRoot 'batch-ui.ps1')
 
 . (Join-Path $PSScriptRoot 'session-ui.ps1')
+
+. (Join-Path $PSScriptRoot 'learning-ui.ps1')

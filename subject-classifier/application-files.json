@@ -32,5 +32,7 @@
   "奶龙.code.cmd",
   "app-session.ps1",
   "session-ui.ps1",
-  "tools/install-desktop.ps1"
+  "tools/install-desktop.ps1",
+  "learned-classification.ps1",
+  "learning-ui.ps1"
 ]

@@ -43,6 +43,19 @@ try {
             }
             Report-Job 'done' @{Outcomes=$outcomes;Completed=$outcomes.Count;Total=$paths.Count;Cancelled=([IO.File]::Exists($Result+'.cancel') -and $outcomes.Count -lt $paths.Count);PrinterName=[string]$requestData.PrinterName}
         }
+        'train' {
+            $indexState=Sync-LibraryIndex -Incremental
+            if($indexState.Busy){throw '索引仍在更新，请等待完成后再学习。'}
+            $script:LastTrainingProgress=[datetime]::MinValue
+            $training=Train-LibraryClassifier -Progress {
+                param($done,$total,$name)
+                if($done -eq $total -or ([datetime]::UtcNow-$script:LastTrainingProgress).TotalMilliseconds -ge 150){
+                    Report-Job 'running' @{Done=$done;Total=$total;Name=$name;Stage='training'}
+                    $script:LastTrainingProgress=[datetime]::UtcNow
+                }
+            }
+            Report-Job 'done' $training
+        }
         'scan' {
             $plan=@(Find-DuplicateDocuments -Progress { param($done,$total) Report-Job 'running' @{ Done=$done; Total=$total } })
             Report-Job 'done' @{ Plan=$plan }

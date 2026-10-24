@@ -329,5 +329,9 @@
     "maxPages": 2,
     "maxFileMiB": 25,
     "timeoutSeconds": 12
+  },
+  "learning": {
+    "enabled": true,
+    "retrainMinutes": 10
   }
 }

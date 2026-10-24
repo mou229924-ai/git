@@ -76,5 +76,9 @@ function Get-DocumentClassification {
         $rule = @($script:Cfg.subjects | Where-Object name -eq $Context) | Select-Object -First 1
         if ($rule) { $decision=@{ Ambiguous=$false; Rule=$rule; Detail='parent directory context' }; $how='folder-context' }
     }
+    if($null -eq $decision -and -not $Context -and $script:Cfg.learning -and [bool]$script:Cfg.learning.enabled){
+        $learned=Get-LearnedClassification -Path $Path -Text $text -TextProvided
+        if($learned){$decision=$learned;$how='learned'}
+    }
     return @{ Decision=$decision; Text=$text; How=$how }
 }

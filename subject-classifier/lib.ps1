@@ -194,3 +194,5 @@ function Set-RoundedRegion {
 . (Join-Path $PSScriptRoot 'environment.ps1')
 
 . (Join-Path $PSScriptRoot 'app-session.ps1')
+
+. (Join-Path $PSScriptRoot 'learned-classification.ps1')
