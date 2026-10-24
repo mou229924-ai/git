@@ -24,5 +24,7 @@
   "config.example.json",
   "configuration.ps1",
   "document-text.ps1",
-  "classification-learning.ps1"
+  "classification-learning.ps1",
+  "observability.ps1",
+  "batch-ui.ps1"
 ]

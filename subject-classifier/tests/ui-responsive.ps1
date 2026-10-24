@@ -83,6 +83,24 @@ try{
     $sourceHash=(Get-FileHash -LiteralPath $pdf.FullName -Algorithm SHA256).Hash
     $journalAfter=0;if([IO.File]::Exists($journalPath)){$journalAfter=(Get-Item -LiteralPath $journalPath).Length}
     Ui-Check 'Cancelled scan never appends a deletion action' ($journalBefore -eq $journalAfter)
+    # Real batch workers move only these synthetic files; they must not block the UI.
+    $savedEnsure=(Get-Command Ensure-LibraryWatcher).ScriptBlock
+    function Ensure-LibraryWatcher {$script:UiBatchWatcherRequested=$true}
+    $batchSource=Join-Path $script:AppDir ('ui-batch-'+[guid]::NewGuid().ToString('N')+'.txt')
+    $batchExport=Join-Path $script:AppDir ('_ui-export-'+[guid]::NewGuid().ToString('N'))
+    [void][IO.Directory]::CreateDirectory($batchExport)
+    [IO.File]::WriteAllText($batchSource,'synthetic-ui-batch-content',$script:Utf8)
+    try{
+        $before=$script:Heartbeats;$watch=[Diagnostics.Stopwatch]::StartNew()
+        Start-LibraryBatchJob @{Task='import';Paths=@($batchSource)};$watch.Stop()
+        Ui-Check 'Starting a real batch import returns promptly' ($watch.ElapsedMilliseconds -lt 1800 -and $script:BatchJob.Process.Id -ne $PID)
+        $deadline=(Get-Date).AddSeconds(20);while($script:BatchJob -and (Get-Date)-lt $deadline){Pump-Ui 80}
+        $batchImported=Join-Path $script:Root ([IO.Path]::GetFileName($batchSource))
+        Ui-Check 'Batch import completes with original bytes and UI heartbeats' (-not $script:BatchJob -and [IO.File]::Exists($batchImported) -and [IO.File]::ReadAllText($batchImported) -eq 'synthetic-ui-batch-content' -and ($script:Heartbeats-$before) -ge 4)
+        Start-LibraryBatchJob @{Task='export';Paths=@($batchImported);Destination=$batchExport}
+        $deadline=(Get-Date).AddSeconds(20);while($script:BatchJob -and (Get-Date)-lt $deadline){Pump-Ui 80}
+        Ui-Check 'Batch export completes and releases the progress UI' (-not $script:BatchJob -and -not $batchProgress.Visible -and -not [IO.File]::Exists($batchImported) -and [IO.File]::ReadAllText((Join-Path $batchExport ([IO.Path]::GetFileName($batchSource)))) -eq 'synthetic-ui-batch-content')
+    }finally{Set-Item Function:\Ensure-LibraryWatcher -Value $savedEnsure}
     Ui-Check 'Original source fixture remains unchanged' ($fixtureHash -eq (Get-FileHash -LiteralPath $pdf.FullName -Algorithm SHA256).Hash)
 }catch{Ui-Check ('Unhandled test error: '+$_.Exception.Message) $false;Write-Output $_.ScriptStackTrace}
 finally{

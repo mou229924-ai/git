@@ -30,7 +30,7 @@ function Close-LibraryJob {
     if (-not $Job) { return }
     if ($Stop -and -not $Job.Process.HasExited) { $Job.Process.Kill(); $null=$Job.Process.WaitForExit(2000) }
     $Job.Process.Dispose()
-    foreach ($file in @($Job.Request,$Job.Result)) { if ($file -and [IO.File]::Exists($file)) { try { [IO.File]::Delete($file) } catch { } } }
+    foreach ($file in @($Job.Request,$Job.Result,($Job.Result+'.cancel'))) { if ($file -and [IO.File]::Exists($file)) { try { [IO.File]::Delete($file) } catch { } } }
 }
 
 function Cancel-DuplicateScan {
@@ -290,8 +290,9 @@ $refreshTimer.Add_Tick({
         $job=Get-Variable -Name $kind -Scope Script -ValueOnly
         if(-not $job){continue}
         $state=Read-LibraryJob $job
-        if($state -and $state.State -eq 'running' -and $kind -eq 'DedupeJob' -and $job.Task -eq 'scan'){
-            $lblStatus.Text='检查重复文档  '+$state.Data.Done+' / '+$state.Data.Total+'   ·   可继续浏览或取消'
+        if($state -and $state.State -eq 'running' -and $job.Task -in @('scan','cleanup','index','rebuild')){
+            $label=switch($job.Task){'scan'{'检查重复文档'}'cleanup'{'回收重复副本'}default{'更新搜索索引'}}
+            $lblStatus.Text=$label+'  '+$state.Data.Done+' / '+$state.Data.Total+'   ·   可继续搜索浏览'
         }
         if($state -and $state.State -in @('done','failed')){
             Set-Variable -Name $kind -Scope Script -Value $null
@@ -523,3 +524,5 @@ $searchShell.Add_Resize({
 })
 $txtQuery.Location=New-Object Drawing.Point((S 47),(S 15))
 Update-ResultColumnWidths
+
+. (Join-Path $PSScriptRoot 'batch-ui.ps1')

@@ -136,7 +136,9 @@ try {
     $r = @(Invoke-DuplicateCleanup -Plan @((PlanFor $a $notDoc)) -Execute)
     Check 'Manually forged non-document plan is rejected' ($r[0].Status -eq 'skipped' -and (Test-Path -LiteralPath $notDoc))
     $wrongHash = PlanFor $a $b; $wrongHash.Hash = '0000'
-    $r = @(Invoke-DuplicateCleanup -Plan @($wrongHash) -Execute)
+    $script:CleanupProgress=@()
+    $r = @(Invoke-DuplicateCleanup -Plan @($wrongHash) -Execute -Progress {param($done,$total)$script:CleanupProgress+=@{Done=$done;Total=$total}})
+    Check 'Rejected cleanup still reports exact completed progress without recycling' ($script:CleanupProgress.Count -eq 2 -and $script:CleanupProgress[0].Done -eq 0 -and $script:CleanupProgress[1].Done -eq 1 -and $script:CleanupProgress[1].Total -eq 1 -and (Test-Path -LiteralPath $b))
     Check 'Invalid scan hash blocks deletion' ($r[0].Status -eq 'skipped' -and (Test-Path -LiteralPath $b))
     $wrongSize = PlanFor $a $b; $wrongSize.Size = 9999
     $r = @(Invoke-DuplicateCleanup -Plan @($wrongSize) -Execute)

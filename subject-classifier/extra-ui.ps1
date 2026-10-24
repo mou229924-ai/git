@@ -98,27 +98,14 @@ function Show-DirectoryManager {
 }
 
 function Show-BatchPrint {
-    if ($script:UiUpdating) { return }
-    $paths=@($list.SelectedItems | ForEach-Object { [string]$_.Tag })
-    if ($paths.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show('请先多选文件。Ctrl 或 Shift 可多选，Ctrl+A 可全选当前结果。','批量打印'); return }
-    try {
+    if($script:UiUpdating){return}
+    $paths=@($list.SelectedItems|ForEach-Object{[string]$_.Tag})
+    if(-not $paths.Count){$lblStatus.Text='请先多选要打印的文件。';return}
+    try{
         $printer=New-Object Drawing.Printing.PrinterSettings
-        if (-not $printer.IsValid) { throw '没有可用的默认打印机，请先在 Windows 中设置。' }
-        $plan=@(Invoke-BatchPrint -Paths $paths)
-        $supported=@($plan | Where-Object Supported)
-        $unsupported=@($plan | Where-Object { -not $_.Supported })
-        $summary='默认打印机：'+$printer.PrinterName+"`r`n可提交："+$supported.Count+' 个；不支持：'+$unsupported.Count+' 个。'+"`r`n`r`n"
-        $summary+=(@($supported | Select-Object -First 15 | ForEach-Object { [IO.Path]::GetFileName($_.Path) }) -join "`r`n")
-        if ($unsupported.Count) { $summary+="`r`n`r`n跳过："+(@($unsupported | ForEach-Object { [IO.Path]::GetFileName($_.Path)+'：'+$_.Error }) -join "`r`n") }
-        if ($supported.Count -eq 0) { [void][Windows.Forms.MessageBox]::Show($summary,'批量打印'); return }
-        if ([Windows.Forms.MessageBox]::Show(($summary+"`r`n`r`n确认提交打印？份数和纸张使用各应用的默认设置。"),'批量打印','YesNo','Question') -ne 'Yes') { return }
-        $results=@(Invoke-BatchPrint -Paths @($supported | ForEach-Object Path) -Execute)
-        $count=@($results | Where-Object Status -eq 'submitted').Count
-        $errors=@($results | Where-Object Status -eq 'skipped')
-        $message='已调用打印程序 '+$count+' 个；失败或跳过 '+$errors.Count+' 个。请在系统打印队列确认进度。'
-        if ($errors.Count) { $message+="`r`n"+(@($errors | ForEach-Object { [IO.Path]::GetFileName($_.Path)+'：'+$_.Error }) -join "`r`n") }
-        [void][Windows.Forms.MessageBox]::Show($message,'批量打印')
-    } catch { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'批量打印') }
+        if(-not $printer.IsValid){throw '没有可用的默认打印机，请先在 Windows 中设置。'}
+        Start-LibraryBatchJob @{Task='print-plan';Paths=$paths;PrinterName=$printer.PrinterName}
+    }catch{$lblStatus.Text='打印未开始：'+$_.Exception.Message}
 }
 
 $dateFilter=New-Object Windows.Forms.ComboBox

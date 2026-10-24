@@ -47,19 +47,10 @@ $dropAction = {
     if ($script:UiUpdating) { return }
     if (Get-Command Cancel-DuplicateScan -ErrorAction SilentlyContinue) { Cancel-DuplicateScan }
     if (Get-Command Stop-FilePreview -ErrorAction SilentlyContinue) { Stop-FilePreview }
-    $script:UiUpdating = $true; $refreshTimer.Stop()
     try {
-        $paths = [string[]]$eventArgs.Data.GetData([Windows.Forms.DataFormats]::FileDrop)
-        $result = @(Import-LibraryItems -Paths $paths)
-        $success = @($result | Where-Object Success).Count
-        $errors = @($result | Where-Object { -not $_.Success })
-        if ($success) { Ensure-LibraryWatcher }
-        $lblStatus.Text = '已移入 ' + $success + ' 个文件，后台将自动分类；跳过 ' + $errors.Count + ' 个。'
-        if ($errors.Count) { [void][Windows.Forms.MessageBox]::Show((($errors | ForEach-Object { [IO.Path]::GetFileName($_.Source) + '：' + $_.Error }) -join "`r`n"),'部分文件未导入') }
-        Request-IndexRefresh -Paths @($result | Where-Object Success | ForEach-Object Target)
-        Invoke-Search
-    } catch { [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'导入失败') }
-    finally { $script:UiUpdating = $false; $refreshTimer.Start() }
+        $paths=[string[]]$eventArgs.Data.GetData([Windows.Forms.DataFormats]::FileDrop)
+        Start-LibraryBatchJob @{Task='import';Paths=@($paths)}
+    }catch{$lblStatus.Text='导入未开始：'+$_.Exception.Message}
 }
 foreach ($control in @($form,$list,$dropPanel,$dropLabel,$previewHost,$previewText)) {
     $control.AllowDrop = $true

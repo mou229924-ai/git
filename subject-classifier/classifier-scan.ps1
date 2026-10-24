@@ -401,6 +401,7 @@ function Scan-Once {
                     }
                 }
             } catch [System.TimeoutException] {
+                Write-Log ('BUSY classification retry') -Exception $_.Exception
                 $script:LastScanBusyCount++
                 $script:Defer[$key] = (Get-Date).AddSeconds([Math]::Max(1, [int]$script:Cfg.pollSeconds))
                 continue
@@ -456,6 +457,7 @@ function Scan-Once {
             try {
                 Process-DroppedFolder -Dir $dir
             } catch [System.TimeoutException] {
+                Write-Log ('BUSY classification retry') -Exception $_.Exception
                 $script:LastScanBusyCount++
                 continue
             } catch [IO.IOException] {

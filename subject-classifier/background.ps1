@@ -6,6 +6,14 @@ function Report-Job {
     param([string]$State,$Data,[string]$ErrorText='')
     Write-AtomicUtf8 $Result (@{ State=$State; Data=$Data; Error=$ErrorText } | ConvertTo-Json -Depth 12 -Compress)
 }
+$script:LastOperationProgress=[datetime]::MinValue
+$operationProgress={param($done,$total,$name,$operation)
+    if($done -eq 0 -or $done -eq $total -or ([datetime]::UtcNow-$script:LastOperationProgress).TotalMilliseconds -ge 150){
+        Report-Job 'running' @{Done=$done;Total=$total;Name=$name;Operation=$operation}
+        $script:LastOperationProgress=[datetime]::UtcNow
+    }
+}
+$shouldCancel={return [IO.File]::Exists($Result+'.cancel')}
 try {
     Report-Job 'running' @{ Done=0; Total=0 }
     switch ([string]$requestData.Task) {
@@ -26,12 +34,21 @@ try {
             }
             Report-Job 'done' $data
         }
+        {$_ -in @('import','export','print','print-plan')} {
+            $paths=@($requestData.Paths | Select-Object -Unique)
+            switch([string]$requestData.Task){
+                'import'{$outcomes=@(Import-LibraryItems -Paths $paths -Progress $operationProgress -ShouldCancel $shouldCancel)}
+                'export'{$outcomes=@(Export-LibraryFiles -Paths $paths -Destination ([string]$requestData.Destination) -Progress $operationProgress -ShouldCancel $shouldCancel)}
+                default{$outcomes=@(Invoke-BatchPrint -Paths $paths -Execute:($requestData.Task -eq 'print') -Progress $operationProgress -ShouldCancel $shouldCancel)}
+            }
+            Report-Job 'done' @{Outcomes=$outcomes;Completed=$outcomes.Count;Total=$paths.Count;Cancelled=([IO.File]::Exists($Result+'.cancel') -and $outcomes.Count -lt $paths.Count);PrinterName=[string]$requestData.PrinterName}
+        }
         'scan' {
             $plan=@(Find-DuplicateDocuments -Progress { param($done,$total) Report-Job 'running' @{ Done=$done; Total=$total } })
             Report-Job 'done' @{ Plan=$plan }
         }
         'cleanup' {
-            $outcomes=@(Invoke-DuplicateCleanup -Plan @($requestData.Plan) -Execute)
+            $outcomes=@(Invoke-DuplicateCleanup -Plan @($requestData.Plan) -Execute -Progress $operationProgress)
             Report-Job 'done' @{ Outcomes=$outcomes }
         }
         'rebuild' {
@@ -40,4 +57,4 @@ try {
         }
         default { throw '未知后台任务。' }
     }
-} catch { Report-Job 'failed' $null $_.Exception.Message; exit 1 }
+} catch { Write-Log ('JOB ERROR  '+[string]$requestData.Task+'  '+$_.Exception.Message) -Exception $_.Exception; Report-Job 'failed' $null $_.Exception.Message; exit 1 } finally { Flush-ApplicationLogs -Force }

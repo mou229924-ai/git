@@ -15,13 +15,6 @@ function Initialize-ApplicationRuntime {
     $versionPath=Join-Path $script:AppDir 'VERSION'
     if([IO.File]::Exists($versionPath)){$script:AppVersion=[IO.File]::ReadAllText($versionPath).Trim()}
 }
-function Write-Log {
-    param([string]$Message)
-    try {
-        if ((Test-Path -LiteralPath $script:LogPath) -and ((Get-Item -LiteralPath $script:LogPath).Length -gt 2MB)) {
-            Move-Item -LiteralPath $script:LogPath -Destination ($script:LogPath + '.old') -Force
-        }
-        $line=(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')+'  '+$Message+[Environment]::NewLine
-        [IO.File]::AppendAllText($script:LogPath,$line,$script:Utf8)
-    } catch {}
-}
+
+
+. (Join-Path $PSScriptRoot 'observability.ps1')

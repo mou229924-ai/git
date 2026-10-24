@@ -47,7 +47,7 @@ function Start-TrayApp {
                 $script:NextClassificationReconcile=$now.AddSeconds(30)
             }
         } catch [System.TimeoutException] {
-            # A short library mutation is in progress; the next tick retries fairly.
+            Write-Log ('BUSY  '+$_.Exception.Message) -Exception $_.Exception
         } catch {
             Write-Log ('TICK ERROR  ' + $_.Exception.Message)
         }
@@ -123,5 +123,5 @@ function Start-TrayApp {
 
     $timer.Start()
     $notify.ShowBalloonTip(5000, $title, [string]$script:Cfg.tray.started, [System.Windows.Forms.ToolTipIcon]::Info)
-    try{[System.Windows.Forms.Application]::Run($script:Context)}finally{Stop-IndexChangeMonitor;$timer.Dispose();$notify.Dispose()}
+    try{[System.Windows.Forms.Application]::Run($script:Context)}finally{Flush-ApplicationLogs -Force;Stop-IndexChangeMonitor;$timer.Dispose();$notify.Dispose()}
 }

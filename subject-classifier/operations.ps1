@@ -162,12 +162,17 @@ function Test-DedupeVerified {
 }
 
 function Invoke-DuplicateCleanup {
-    param([object[]]$Plan, [switch]$Execute)
+    param([object[]]$Plan, [switch]$Execute,[scriptblock]$Progress,[scriptblock]$ShouldCancel)
     if (-not $Execute) { return $Plan }
     if (-not (Test-DedupeVerified)) { throw '去重测试未通过或代码已变化，删除功能已锁定。' }
+
+    $completed=0;$total=@($Plan).Count
+    Invoke-OperationProgress -Progress $Progress -Done 0 -Total $total -Operation 'cleanup'
     Invoke-LibraryLock {
         Add-Type -AssemblyName Microsoft.VisualBasic
         foreach ($entry in $Plan) {
+            if(Test-OperationCancellation -ShouldCancel $ShouldCancel){break}
+
             $keepStream = $null; $duplicateStream = $null
             try {
                 $keep = Assert-LibraryDocument $entry.Keep
@@ -195,15 +200,22 @@ function Invoke-DuplicateCleanup {
             } finally {
                 if ($duplicateStream) { $duplicateStream.Dispose() }
                 if ($keepStream) { $keepStream.Dispose() }
-            }
+            
+                $completed++; Invoke-OperationProgress -Progress $Progress -Done $completed -Total $total -Name ([string]$entry.Duplicate) -Operation 'cleanup' 
+}
         }
     }
 }
 
 function Import-LibraryItems {
-    param([string[]]$Paths)
+    param([string[]]$Paths,[scriptblock]$Progress,[scriptblock]$ShouldCancel)
+    $completed=0;$total=@($Paths).Count
+    Invoke-OperationProgress -Progress $Progress -Done 0 -Total $total -Operation 'import'
+
     Invoke-LibraryLock {
         foreach ($path in $Paths) {
+            if(Test-OperationCancellation -ShouldCancel $ShouldCancel){break}
+
             try {
                 $source = Get-Item -LiteralPath $path -Force -ErrorAction Stop
                 if (Get-RelativePath $source.FullName) { throw '文件已在资料库内。' }
@@ -220,7 +232,9 @@ function Import-LibraryItems {
                 Move-Item -LiteralPath $source.FullName -Destination $target -ErrorAction Stop
                 Write-Log ('IMPORTED  ' + $source.FullName + ' -> ' + $target)
                 [pscustomobject]@{ Source=$path; Target=$target; Success=$true; Error='' }
-            } catch { [pscustomobject]@{ Source=$path; Target=''; Success=$false; Error=$_.Exception.Message } }
+            } catch { [pscustomobject]@{ Source=$path; Target=''; Success=$false; Error=$_.Exception.Message } } finally {
+                $completed++; Invoke-OperationProgress -Progress $Progress -Done $completed -Total $total -Name ([string]$path) -Operation 'import' 
+            }
         }
     }
 }

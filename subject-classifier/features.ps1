@@ -107,9 +107,14 @@ function Start-DocumentPrint {
 }
 
 function Invoke-BatchPrint {
-    param([string[]]$Paths,[switch]$Execute)
+    param([string[]]$Paths,[switch]$Execute,[scriptblock]$Progress,[scriptblock]$ShouldCancel)
+    $completed=0;$total=@($Paths).Count
+    Invoke-OperationProgress -Progress $Progress -Done 0 -Total $total -Operation 'print'
+
     $seen = @{}
     foreach ($path in $Paths) {
+            if(Test-OperationCancellation -ShouldCancel $ShouldCancel){break}
+
         try {
             $full = Assert-LibraryFile $path
             if ($seen.ContainsKey($full)) { continue }
@@ -120,16 +125,23 @@ function Invoke-BatchPrint {
             if (-not (Test-FileReady $full)) { throw '文件正在使用，请关闭后重试。' }
             Start-DocumentPrint $full
             [pscustomobject]@{ Path=$full; Status='submitted'; Error='' }
-        } catch { [pscustomobject]@{ Path=$path; Status='skipped'; Supported=$false; Error=$_.Exception.Message } }
+        } catch { [pscustomobject]@{ Path=$path; Status='skipped'; Supported=$false; Error=$_.Exception.Message } } finally {
+                $completed++; Invoke-OperationProgress -Progress $Progress -Done $completed -Total $total -Name ([string]$path) -Operation 'print' 
+            }
     }
 }
 
 function Export-LibraryFiles {
-    param([string[]]$Paths,[string]$Destination)
+    param([string[]]$Paths,[string]$Destination,[scriptblock]$Progress,[scriptblock]$ShouldCancel)
+    $completed=0;$total=@($Paths).Count
+    Invoke-OperationProgress -Progress $Progress -Done 0 -Total $total -Operation 'export'
+
     $outcomes=@(Invoke-LibraryLock {
         if (-not (Test-Path -LiteralPath $Destination -PathType Container)) { throw '目标文件夹不存在。' }
         if (Get-RelativePath (Join-Path $Destination 'probe.txt')) { throw '此入口仅用于移出资料库。' }
         foreach ($path in $Paths) {
+            if(Test-OperationCancellation -ShouldCancel $ShouldCancel){break}
+
             try {
                 $source = Assert-LibraryFile $path
                 if (-not (Test-FileReady $source)) { throw '文件正在使用。' }
@@ -141,7 +153,9 @@ function Export-LibraryFiles {
                 Move-Item -LiteralPath $source -Destination $target -ErrorAction Stop
                 Write-Log ('EXPORTED  '+$source+' -> '+$target)
                 [pscustomobject]@{ Source=$source; Target=$target; Success=$true; Error='' }
-            } catch { [pscustomobject]@{ Source=$path; Target=''; Success=$false; Error=$_.Exception.Message } }
+            } catch { [pscustomobject]@{ Source=$path; Target=''; Success=$false; Error=$_.Exception.Message } } finally {
+                $completed++; Invoke-OperationProgress -Progress $Progress -Done $completed -Total $total -Name ([string]$path) -Operation 'export' 
+            }
         }
     })
     foreach($outcome in $outcomes){if($outcome.Success){$null=Update-IndexEntry -FilePath $outcome.Source}}
