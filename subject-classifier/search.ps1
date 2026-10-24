@@ -181,75 +181,6 @@ function Update-Stats {
     $lblStatus.Text = [string]::Format([string]$script:Cfg.search.statLine, $entries.Count, $withText) + '  ' + [string]$script:Cfg.search.pdfNote
 }
 
-function Invoke-Search {
-    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-    [System.Windows.Forms.Application]::DoEvents()
-    if (-not $script:UiUpdating) { $null = Sync-LibraryIndex }
-    $q = $txtQuery.Text.Trim()
-    $subject = ''
-    if ($cmbSubject.SelectedIndex -gt 0) { $subject = [string]$cmbSubject.SelectedItem }
-    $sw = [System.Diagnostics.Stopwatch]::StartNew()
-    $since=[datetime]::MinValue
-    if ($dateFilter.SelectedIndex -eq 1) { $since=[datetime]::Today }
-    elseif ($dateFilter.SelectedIndex -eq 2) { $since=[datetime]::Today.AddDays(-6) }
-    elseif ($dateFilter.SelectedIndex -eq 3) { $since=[datetime]::Today.AddDays(-29) }
-    $extensions=@()
-    switch ($formatFilter.SelectedIndex) {
-        1 { $extensions=@('.pdf') }
-        2 { $extensions=@('.doc','.docx','.docm','.rtf','.odt') }
-        3 { $extensions=@('.txt','.md','.csv','.tsv') }
-        4 { $extensions=@('.png','.jpg','.jpeg','.gif','.bmp') }
-        5 { $extensions=@('.zip','.rar','.7z') }
-    }
-    $results = @(Search-Index -Query $q -Subject $subject -IncludeContent $chkContent.Checked -Limit 300 -ModifiedSince $since -Extensions $extensions -SortKey $script:SortKey -Descending $script:SortDescending)
-    $sw.Stop()
-
-    $script:HoverIndex = -1
-    $list.BeginUpdate()
-    $list.Items.Clear()
-    foreach ($r in $results) {
-        $item = New-Object System.Windows.Forms.ListViewItem([string]$r.name)
-        [void]$item.SubItems.Add((Format-Size -Size ([long]$r.size)))
-        [void]$item.SubItems.Add([string]$r.mtime)
-        [void]$item.SubItems.Add([System.IO.Path]::GetDirectoryName([string]$r.rel))
-        [void]$item.SubItems.Add([string]$r.hit)
-        $item.Tag = [string]$r.full
-        [void]$list.Items.Add($item)
-    }
-    $list.EndUpdate()
-
-    Update-Stats
-    if ($results.Count -eq 0) {
-        $lblStatus.Text = [string]$script:Cfg.search.noResult
-    } else {
-        $lblStatus.Text = [string]::Format([string]$script:Cfg.search.found, $results.Count, $sw.ElapsedMilliseconds)
-    }
-    $form.Cursor = [System.Windows.Forms.Cursors]::Default
-}
-
-function Invoke-Rebuild {
-    param([switch]$Auto)
-    if ($script:UiUpdating) { return }
-    if (-not $Auto) {
-        $answer = [System.Windows.Forms.MessageBox]::Show([string]$script:Cfg.search.rebuildConfirm, [string]$script:Cfg.search.title, [System.Windows.Forms.MessageBoxButtons]::YesNo, [System.Windows.Forms.MessageBoxIcon]::Question)
-        if ($answer -ne [System.Windows.Forms.DialogResult]::Yes) { return }
-    }
-    $script:UiUpdating = $true
-    try {
-    $form.Cursor = [System.Windows.Forms.Cursors]::WaitCursor
-    $result = Rebuild-Index -Progress {
-        param($i, $n, $name)
-        $lblStatus.Text = [string]::Format([string]$script:Cfg.search.indexing, $i, $n) + '  ' + [string]$name
-        [System.Windows.Forms.Application]::DoEvents()
-    }
-    $form.Cursor = [System.Windows.Forms.Cursors]::Default
-    $list.Items.Clear()
-    $script:HoverIndex = -1
-    Update-Stats
-    $lblStatus.Text = [string]::Format([string]$script:Cfg.search.indexDone, $result.Total, $result.WithText) + '  ' + [string]$script:Cfg.search.pdfNote
-    } finally { $script:UiUpdating = $false; $form.Cursor = 'Default' }
-}
-
 function Restart-SearchWindow {
     if ($script:Restarting) { return }
     if ($script:PendingDpi -le 0) { return }
@@ -285,7 +216,7 @@ try {
     if ($dbProp -ne $null) { $dbProp.SetValue($form, $true, $null) }
 } catch {
 }
-$form.Text = [string]$script:Cfg.search.title
+$form.Text = [string]$script:Cfg.search.title + ' · v' + $script:AppVersion
 $form.StartPosition = 'CenterScreen'
 $form.ClientSize = New-Object System.Drawing.Size((S 1320), (S 820))
 $form.MinimumSize = New-Object System.Drawing.Size((S 1100), (S 650))

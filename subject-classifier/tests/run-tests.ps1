@@ -10,7 +10,14 @@ $runDir = Join-Path $runBase ([guid]::NewGuid().ToString('N'))
 $scratchApp = Join-Path $runDir '_程序'
 $scratchRoot = Join-Path $runDir 'library'
 New-Item -ItemType Directory -Path $scratchApp,$scratchRoot,(Join-Path $scratchApp 'tests') -Force | Out-Null
-foreach ($runtimeFile in @('operations.ps1','lib.ps1','classification.ps1','features.ps1','classifier.ps1','search.ps1','library-ui.ps1','extra-ui.ps1','explorer-layout.ps1','background.ps1','preview-host.ps1','NativePreview.cs')) { Copy-Item -LiteralPath (Join-Path $sourceDir $runtimeFile) -Destination $scratchApp }
+$runtimeManifest = Join-Path $sourceDir 'application-files.json'
+$runtimeFiles = [IO.File]::ReadAllText($runtimeManifest, $script:Utf8) | ConvertFrom-Json
+foreach ($runtimeFile in $runtimeFiles) {
+    $destination = Join-Path $scratchApp $runtimeFile
+    New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path $sourceDir $runtimeFile) -Destination $destination
+}
+Copy-Item -LiteralPath $runtimeManifest -Destination $scratchApp
 Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $scratchApp 'tests\run-tests.ps1')
 $script:AppDir = $scratchApp
 $script:Root = $scratchRoot
@@ -223,11 +230,7 @@ try {
     Check 'Readers never observe partially written index JSON' $validJson
     Check 'Concurrent writers preserve all sixteen document entries' (@(Load-IndexEntries | Where-Object name -like 'worker-*.txt').Count -eq 16)
     $p1.Dispose(); $p2.Dispose()
-    $codeAst = [Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceDir 'classifier.ps1'),[ref]$null,[ref]$null)
-    foreach ($name in @('Move-ToSubject','Scan-Once')) {
-        $function = $codeAst.Find({ param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name }.GetNewClosure(),$true)
-        Invoke-Expression $function.Extent.Text
-    }
+    . (Join-Path $sourceDir 'classifier-scan.ps1')
     Check 'Different-length subject keywords are ambiguous' ((Get-FilenameDecision '物理与信息技术综合资料').Ambiguous)
     Check 'Another mixed-subject filename is ambiguous' ((Get-FilenameDecision '历史与自然地理综合练习').Ambiguous)
     Check 'Unambiguous filename classification still works' ((Get-FilenameDecision '2026物理试卷').Rule.name -eq '物理')

@@ -1,0 +1,21 @@
+[
+  "app-runtime.ps1",
+  "lib.ps1",
+  "index-store.ps1",
+  "operations.ps1",
+  "classification.ps1",
+  "features.ps1",
+  "classifier.ps1",
+  "classifier-dialog.ps1",
+  "classifier-scan.ps1",
+  "classifier-tray.ps1",
+  "classifier-diagnostics.ps1",
+  "search.ps1",
+  "library-ui.ps1",
+  "extra-ui.ps1",
+  "explorer-layout.ps1",
+  "background.ps1",
+  "preview-host.ps1",
+  "NativePreview.cs",
+  "VERSION"
+]

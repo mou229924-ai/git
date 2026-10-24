@@ -1,5 +1,4 @@
 ﻿# Explorer-style shell. Slow operations run in independent processes.
-$refreshTimer.Stop()
 $script:SearchJob=$null; $script:DedupeJob=$null; $script:IndexJob=$null
 $script:PreviewJob=$null; $script:PreviewPath=''; $script:PreviewPage=0
 $script:SearchAgain=$false; $script:ListUpdating=$false; $script:DedupeDialogOpen=$false

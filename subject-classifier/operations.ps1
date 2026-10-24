@@ -67,76 +67,6 @@ function Read-AtomicUtf8 {
     }
 }
 
-function Load-IndexEntries {
-    if (-not [IO.File]::Exists($script:IndexManifest)) { return }
-    $raw = Read-AtomicUtf8 $script:IndexManifest
-    if ([string]::IsNullOrWhiteSpace($raw)) { return }
-    foreach ($entry in @($raw | ConvertFrom-Json)) { if ($entry) { $entry } }
-}
-
-function Save-IndexEntries {
-    param($Entries)
-    Initialize-IndexFolders
-    $json = ConvertTo-Json -InputObject ([object[]]@($Entries)) -Depth 5
-    if (-not [IO.File]::Exists($script:IndexManifest) -or [IO.File]::ReadAllText($script:IndexManifest, $script:Utf8) -ne $json) {
-        Write-AtomicUtf8 -Path $script:IndexManifest -Text $json
-    }
-    $script:SearchTextCache = @{}
-}
-
-function Sync-LibraryIndex {
-    param([scriptblock]$Progress, [switch]$Force)
-    Invoke-LibraryLock {
-        Initialize-IndexFolders
-        $old = @{}
-        foreach ($entry in @(Load-IndexEntries)) { $old[[string]$entry.rel] = $entry }
-        $files = @(Get-LibraryFiles)
-        $entries = New-Object Collections.ArrayList
-        $withText = 0
-        $i = 0
-        foreach ($file in $files) {
-            $i++
-            if ($Progress) { & $Progress $i $files.Count $file.Name }
-            $rel = Get-RelativePath $file.FullName
-            $id = Get-IndexId $rel
-            $textPath = Join-Path $script:IndexDataDir ($id + '.txt')
-            $previous = $old[$rel]
-            if (-not $Force -and $previous -and [long]$previous.size -eq $file.Length -and
-                [long]$previous.mtimeTicks -eq $file.LastWriteTime.Ticks -and
-                (-not $previous.hasText -or [IO.File]::Exists($textPath))) {
-                [void]$entries.Add($previous)
-                if ($previous.hasText) { $withText++ }
-                continue
-            }
-            if (-not (Test-FileReady $file.FullName)) {
-                if ($previous) { [void]$entries.Add($previous); if ($previous.hasText) { $withText++ } }
-                continue
-            }
-            $text = Get-FileText -Path $file.FullName -Max ([int]$script:Cfg.indexMaxChars)
-            $hasText = -not [string]::IsNullOrWhiteSpace($text)
-            if ($hasText) { Write-AtomicUtf8 $textPath $text; $withText++ }
-            [void]$entries.Add([pscustomobject]@{
-                id=$id; rel=$rel; name=$file.Name; subject=(Get-SubjectFromRelPath $rel)
-                size=[long]$file.Length; mtime=$file.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
-                mtimeTicks=[long]$file.LastWriteTime.Ticks; hasText=$hasText
-            })
-        }
-        Save-IndexEntries -Entries $entries.ToArray()
-        return @{ Total=$entries.Count; WithText=$withText }
-    }
-}
-
-function Rebuild-Index {
-    param([scriptblock]$Progress)
-    Sync-LibraryIndex -Progress $Progress -Force
-}
-
-function Update-IndexEntry {
-    param([string]$FilePath, [string]$Text, [switch]$TextProvided, [string]$OldRelPath)
-    # Reconcile actual files under the lock; stale snapshots never overwrite another writer.
-    $null = Sync-LibraryIndex
-}
-
 function Get-StreamHash {
     param([IO.Stream]$Stream)
     $sha = [Security.Cryptography.SHA256]::Create()
@@ -196,9 +126,23 @@ function Assert-LibraryDocument {
 
 function Get-ApplicationCodeHash {
     param([string]$Directory=$script:AppDir)
-    $parts=@()
-    foreach ($name in @('operations.ps1','lib.ps1','classification.ps1','features.ps1','classifier.ps1','search.ps1','library-ui.ps1','extra-ui.ps1','explorer-layout.ps1','background.ps1','preview-host.ps1','NativePreview.cs')) {
-        $parts += $name + ':' + (Get-FileHash -LiteralPath (Join-Path $Directory $name) -Algorithm SHA256).Hash
+    $manifest = Join-Path $Directory 'application-files.json'
+    $names = @('operations.ps1','lib.ps1','classification.ps1','features.ps1','classifier.ps1','search.ps1','library-ui.ps1','extra-ui.ps1','explorer-layout.ps1','background.ps1','preview-host.ps1','NativePreview.cs')
+    $parts = @()
+    if ([IO.File]::Exists($manifest)) {
+        $manifestData = [IO.File]::ReadAllText($manifest, [Text.Encoding]::UTF8) | ConvertFrom-Json
+        $names = @($manifestData)
+        if ($names.Count -eq 0) { throw '运行文件清单为空。' }
+        $parts += 'application-files.json:' + (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash
+    }
+    $rootPrefix = [IO.Path]::GetFullPath($Directory).TrimEnd('\') + '\'
+    foreach ($name in $names) {
+        $relative = [string]$name
+        $full = [IO.Path]::GetFullPath((Join-Path $Directory $relative))
+        if ([IO.Path]::IsPathRooted($relative) -or -not $full.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw '运行文件清单包含无效路径。'
+        }
+        $parts += $relative + ':' + (Get-FileHash -LiteralPath $full -Algorithm SHA256 -ErrorAction Stop).Hash
     }
     $stream=New-Object IO.MemoryStream(,[Text.Encoding]::UTF8.GetBytes(($parts -join ';')))
     try { return Get-StreamHash $stream } finally { $stream.Dispose() }

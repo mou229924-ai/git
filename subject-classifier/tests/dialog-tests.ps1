@@ -12,15 +12,13 @@ public static class DialogTestNative {
 }
 '@
 
-# Load the actual dialog functions without starting the watcher or the library window.
-foreach ($entry in @(@('classifier.ps1',@('S','Update-UiScale','Show-SubjectDialog')), @('extra-ui.ps1',@('Show-DirectoryManager')))) {
-    $tokens=$null; $errors=$null
-    $ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $source $entry[0]),[ref]$tokens,[ref]$errors)
-    foreach ($name in $entry[1]) {
-        $definition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq $name},$false)
-        Invoke-Expression $definition.Extent.Text
-    }
-}
+# The dialog module has no watcher startup side effects and can be loaded directly.
+. (Join-Path $source 'classifier-dialog.ps1')
+$tokens=$null; $errors=$null
+$ast=[Management.Automation.Language.Parser]::ParseFile((Join-Path $source 'extra-ui.ps1'),[ref]$tokens,[ref]$errors)
+$definition=$ast.Find({param($node) $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Show-DirectoryManager'},$false)
+if (-not $definition -or @($errors).Count) { throw 'Directory manager test could not load its definition.' }
+Invoke-Expression $definition.Extent.Text
 $script:Scale=1.0
 $scratch=Join-Path $source ('test-runs\dialogs-'+[guid]::NewGuid().ToString('N'))
 $script:Root=Join-Path $scratch 'library'
@@ -54,22 +52,24 @@ try {
         try {
             $windows=@([Windows.Forms.Application]::OpenForms)
             $input=$windows | Where-Object { @((All-Controls $_) | Where-Object { $_ -is [Windows.Forms.TextBox] -and -not $_.ReadOnly }).Count -gt 0 } | Select-Object -First 1
-            if($state.Sent -and -not $state.Finished) {
-                $state.Finished=$true
-                # Verify delivered text from the returned value after the modal loop completes.
-                [Windows.Forms.SendKeys]::SendWait('{ENTER}')
-            } elseif($input -and -not $state.Handled) {
-                $state.Handled=$true
+            if($input -and -not $state.Handled) {
                 $box=(All-Controls $input) | Where-Object { $_ -is [Windows.Forms.TextBox] -and -not $_.ReadOnly } | Select-Object -First 1
                 $parent=$windows | Where-Object { $_ -ne $input -and $_ -ne $form } | Select-Object -First 1
-                Check 'Nested input has an explicit classifier owner' ($input.Owner -eq $parent -and $null -ne $parent)
-                Check 'Nested input remains above its topmost owner' $input.TopMost
+                if(-not $state.FocusDeadline) {
+                    $state.FocusDeadline=(Get-Date).AddSeconds(3)
+                    Check 'Nested input has an explicit classifier owner' ($input.Owner -eq $parent -and $null -ne $parent)
+                    Check 'Nested input remains above its topmost owner' $input.TopMost
+                }
+                # Shown/BeginInvoke and foreground activation need more than one timer tick.
+                # Never send keystrokes until the actual target owns keyboard focus.
                 $ready=($box.ContainsFocus -and [DialogTestNative]::GetForegroundWindow() -eq $input.Handle)
-                Check 'Nested input receives foreground and keyboard focus' $ready
-                if($ready) {
-                    $state.Box=$box; $state.Sent=$true
-                    [Windows.Forms.SendKeys]::SendWait('new-directory-123')
-                } else { $input.DialogResult='Cancel'; $input.Close(); $parent.Close() }
+                if($ready -or (Get-Date) -ge $state.FocusDeadline) {
+                    $state.Handled=$true
+                    Check 'Nested input receives foreground and keyboard focus' $ready
+                    if($ready) {
+                        [Windows.Forms.SendKeys]::SendWait('new-directory-123{ENTER}')
+                    } else { $input.DialogResult='Cancel'; $input.Close(); $parent.Close() }
+                }
             } elseif(-not $state.Launched) {
                 $parent=$windows | Where-Object { $_ -ne $form } | Select-Object -First 1
                 if($parent) {
@@ -90,31 +90,33 @@ try {
     Check 'Classifier returns the typed new directory' ($result.Action -eq 'new' -and $result.Name -eq 'new-directory-123')
 
     foreach($mode in @('save','cancel','reopen')) {
+        $form.BringToFront(); $form.Activate(); [Windows.Forms.Application]::DoEvents()
         $state=@{Deadline=(Get-Date).AddSeconds(8);Handled=$false;Mode=$mode}
         $timer=New-Object Windows.Forms.Timer; $timer.Interval=200
         $timer.Add_Tick({
             try {
                 $dialog=@([Windows.Forms.Application]::OpenForms) | Where-Object { $_.Text -eq '奶龙.code · 管理目录与分类规则' } | Select-Object -First 1
-                if($state.Sent -and -not $state.Finished) {
-                    $state.Finished=$true
-                    if($state.Mode -eq 'save') {
-                        Check 'Enter is connected to saving the directory' ($null -ne $dialog.AcceptButton)
-                        if($dialog.AcceptButton){[Windows.Forms.SendKeys]::SendWait('{ENTER}')}else{((All-Controls $dialog) | Where-Object { $_ -is [Windows.Forms.Button] -and $_.Text -eq '保存目录与规则' } | Select-Object -First 1).PerformClick()}
-                    } else {
-                        Check ($state.Mode+': Escape can cancel the dialog') ($null -ne $dialog.CancelButton)
-                        if($dialog.CancelButton){[Windows.Forms.SendKeys]::SendWait('{ESC}')}else{$dialog.Close()}
-                    }
-                } elseif($dialog -and -not $state.Handled) {
-                    $state.Handled=$true
+                if($dialog -and -not $state.Handled) {
                     $box=(All-Controls $dialog) | Where-Object { $_ -is [Windows.Forms.ComboBox] } | Select-Object -First 1
-                    Check ($state.Mode+': directory manager is owned by the library') ($dialog.Owner -eq $form)
+                    if(-not $state.FocusDeadline) {
+                        $state.FocusDeadline=(Get-Date).AddSeconds(3)
+                        Check ($state.Mode+': directory manager is owned by the library') ($dialog.Owner -eq $form)
+                    }
                     $ready=($box.ContainsFocus -and [DialogTestNative]::GetForegroundWindow() -eq $dialog.Handle)
-                    Check ($state.Mode+': directory field has keyboard focus') $ready
-                    if($ready) {
-                        $text='directory-'+$state.Mode
-                        $state.Box=$box; $state.Text=$text; $state.Sent=$true
-                        [Windows.Forms.SendKeys]::SendWait($text)
-                    } else { $dialog.Close() }
+                    if($ready -or (Get-Date) -ge $state.FocusDeadline) {
+                        $state.Handled=$true
+                        Check ($state.Mode+': directory field has keyboard focus') $ready
+                        if($ready) {
+                            $text='directory-'+$state.Mode
+                            if($state.Mode -eq 'save') {
+                                Check 'Enter is connected to saving the directory' ($null -ne $dialog.AcceptButton)
+                                [Windows.Forms.SendKeys]::SendWait($text+'{ENTER}')
+                            } else {
+                                Check ($state.Mode+': Escape can cancel the dialog') ($null -ne $dialog.CancelButton)
+                                [Windows.Forms.SendKeys]::SendWait($text+'{ESC}')
+                            }
+                        } else { $dialog.Close() }
+                    }
                 }
                 if((Get-Date) -gt $state.Deadline -and $dialog) { Check 'Directory manager finishes without blocking' $false; $dialog.Close() }
             } catch { Check ('Directory manager error: '+$_.Exception.Message) $false; if($dialog){$dialog.Close()} }
