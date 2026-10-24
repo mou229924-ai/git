@@ -8,7 +8,7 @@ function Verify([string]$Name,[bool]$Passed){[void]$checks.Add(@{Name=$Name;Pass
 function Run-Worker([hashtable]$Request){
     $id=[guid]::NewGuid().ToString('N');$requestFile=Join-Path $PSScriptRoot ($id+'.request.json');$resultFile=Join-Path $PSScriptRoot ($id+'.result.json')
     [IO.File]::WriteAllText($requestFile,($Request|ConvertTo-Json -Depth 10),$script:Utf8)
-    $arguments='-NoProfile -STA -ExecutionPolicy Bypass -File "'+(Join-Path $app 'background.ps1')+'" -Request "'+$requestFile+'" -Result "'+$resultFile+'"'
+    $arguments='-NoProfile -STA -ExecutionPolicy RemoteSigned -File "'+(Join-Path $app 'background.ps1')+'" -Request "'+$requestFile+'" -Result "'+$resultFile+'"'
     $process=Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $arguments -PassThru
     try{
         if(-not $process.WaitForExit(25000)){$process.Kill();throw '后台测试超时。'}

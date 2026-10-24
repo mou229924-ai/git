@@ -19,7 +19,7 @@ function Invoke-IsolatedCheck {
     $stderr=Join-Path $ArtifactsDirectory ($Name+'.stderr.log')
     $quoted=@()
     foreach($argument in $Arguments){if($argument.Contains('"')){throw 'Unsupported quote in test argument.'};$quoted+='"'+$argument+'"'}
-    $processArguments='-NoProfile -STA -ExecutionPolicy Bypass -File "'+$Script+'" '+($quoted -join ' ')
+    $processArguments='-NoProfile -STA -ExecutionPolicy RemoteSigned -File "'+$Script+'" '+($quoted -join ' ')
     $oldHeadless=$env:NAILONG_TEST_HEADLESS
     $watch=[Diagnostics.Stopwatch]::StartNew();$process=$null;$exitCode=1
     try {

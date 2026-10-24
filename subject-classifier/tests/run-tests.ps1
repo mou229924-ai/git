@@ -235,7 +235,7 @@ try {
     $imported = @(Import-LibraryItems @($a))
     Check 'Importing existing library document leaves it intact' (-not $imported[0].Success -and (Test-Path -LiteralPath $a))
     $workerPath = Join-Path $PSScriptRoot 'index-worker.ps1'
-    $workerArgs = '-NoProfile -ExecutionPolicy Bypass -File "' + $workerPath + '" -SourceDir "' + $sourceDir + '" -Root "' + $scratchRoot + '" -AppDir "' + $scratchApp + '" -Worker '
+    $workerArgs = '-NoProfile -ExecutionPolicy RemoteSigned -File "' + $workerPath + '" -SourceDir "' + $sourceDir + '" -Root "' + $scratchRoot + '" -AppDir "' + $scratchApp + '" -Worker '
     $p1 = Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ($workerArgs + 'A') -PassThru
     $p2 = Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ($workerArgs + 'B') -PassThru
     $validJson = $true

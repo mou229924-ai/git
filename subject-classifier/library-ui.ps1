@@ -4,7 +4,7 @@ $script:LastLibrarySignature = ''
 
 function Ensure-LibraryWatcher {
     $scriptPath = Join-Path $script:AppDir 'classifier.ps1'
-    Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList ('-NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "' + $scriptPath + '" -EnsureRunning')
+    Start-Process -FilePath 'powershell.exe' -WindowStyle Hidden -ArgumentList ('-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "' + $scriptPath + '" -EnsureRunning')
 }
 
 $btnDuplicates = New-RoundButton -Text '查找重复' -Kind 'text'

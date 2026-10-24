@@ -77,7 +77,7 @@ second"
     $workerPath=Join-Path $PSScriptRoot 'observability-worker.ps1'
     $processes=@()
     foreach($prefix in @('A','B')){
-        $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$workerPath+'" -RuntimeDirectory "'+$RuntimeDirectory+'" -LogPath "'+$script:LogPath+'" -Prefix '+$prefix
+        $arguments='-NoProfile -ExecutionPolicy RemoteSigned -File "'+$workerPath+'" -RuntimeDirectory "'+$RuntimeDirectory+'" -LogPath "'+$script:LogPath+'" -Prefix '+$prefix
         $child=Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $arguments -PassThru;$childHandle=$child.Handle;$processes+=$child
     }
     $workerOk=$true

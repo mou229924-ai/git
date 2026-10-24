@@ -82,7 +82,7 @@ function Start-TestWorker {
     param([string]$Mode,[string]$Name)
     $signals = Join-Path $run $Name
     New-Item -ItemType Directory -Path $signals -Force | Out-Null
-    $workerArguments = '-NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '" -Worker ' + $Mode + ' -AppDir "' + $app + '" -SignalDir "' + $signals + '"'
+    $workerArguments = '-NoProfile -ExecutionPolicy RemoteSigned -File "' + $PSCommandPath + '" -Worker ' + $Mode + ' -AppDir "' + $app + '" -SignalDir "' + $signals + '"'
     $process = Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $workerArguments -PassThru
     $processHandle=$process.Handle
     [void]$processes.Add($process)

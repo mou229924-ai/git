@@ -26,7 +26,7 @@ try{
         $id=[guid]::NewGuid().ToString('N')
         $resultPath=Join-Path $script:AppDir ('_jobs\'+$id+'.ui-barrier.json')
         $workerPath=Join-Path $script:AppDir 'tests\ui-barrier-worker.ps1'
-        $arguments='-NoProfile -ExecutionPolicy Bypass -File "'+$workerPath+'" -Result "'+$resultPath+'"'
+        $arguments='-NoProfile -ExecutionPolicy RemoteSigned -File "'+$workerPath+'" -Result "'+$resultPath+'"'
         $process=Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $arguments -PassThru
         return @{Process=$process;Request='';Result=$resultPath;Task='scan';Started=(Get-Date);Auto=$false}
     }

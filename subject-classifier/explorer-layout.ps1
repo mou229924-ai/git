@@ -14,7 +14,7 @@ function Start-LibraryJob {
     $requestPath=Join-Path $jobsDirectory ($id+'.request.json')
     $resultPath=Join-Path $jobsDirectory ($id+'.result.json')
     Write-AtomicUtf8 $requestPath ($Request | ConvertTo-Json -Depth 12)
-    $arguments='-NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+(Join-Path $script:AppDir 'background.ps1')+'" -Request "'+$requestPath+'" -Result "'+$resultPath+'"'
+    $arguments='-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "'+(Join-Path $script:AppDir 'background.ps1')+'" -Request "'+$requestPath+'" -Result "'+$resultPath+'"'
     $process=Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $arguments -PassThru
     return @{ Process=$process; Request=$requestPath; Result=$resultPath; Task=$Request.Task; Started=(Get-Date); Auto=$false }
 }
@@ -58,7 +58,7 @@ function Show-FilePreview {
     $previewText.Visible=$true; $previewText.Text='正在载入预览…'
     $previewImage.Visible=$false
     $statusPath=Join-Path $jobsDirectory ([guid]::NewGuid().ToString('N')+'.preview.json')
-    $args='-NoProfile -STA -ExecutionPolicy Bypass -WindowStyle Hidden -File "'+(Join-Path $script:AppDir 'preview-host.ps1')+'" -File "'+$Path+'" -ParentHandle '+$previewHost.Handle.ToInt64()+' -Width '+$previewHost.Width+' -Height '+$previewHost.Height+' -Status "'+$statusPath+'" -Page '+$Page
+    $args='-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "'+(Join-Path $script:AppDir 'preview-host.ps1')+'" -File "'+$Path+'" -ParentHandle '+$previewHost.Handle.ToInt64()+' -Width '+$previewHost.Width+' -Height '+$previewHost.Height+' -Status "'+$statusPath+'" -Page '+$Page
     if ($Fallback) { $args+=' -ForceFallback' }
     $process=Start-Process powershell.exe -WindowStyle Hidden -ArgumentList $args -PassThru
     $script:PreviewJob=@{ Process=$process; Status=$statusPath; Started=(Get-Date); Ready=$false; Fallback=[bool]$Fallback; Handle=0 }
@@ -487,7 +487,7 @@ foreach($definition in @(@('目录','navigation'),@('批量打印','Show-BatchPr
 $previewToggle.Text='预览';$previewToggle.BackColor=[Drawing.Color]::White;$previewToggle.ForeColor=$script:ColText2;$previewToggle.Margin=New-Object Windows.Forms.Padding((S 6),(S 6),0,0);$resultActions.Controls.Add($previewToggle)
 $resultHeader.Add_Resize({$resultActions.Left=[Math]::Max((S 180),$resultHeader.Width-$resultActions.PreferredSize.Width-(S 3));$resultActions.Top=(S 3)})
 $moreMenu=New-Object Windows.Forms.ContextMenuStrip
-foreach($definition in @(@('管理目录','Show-DirectoryManager'),@('重命名 F2','Rename-SelectedFile'),@('检查重复文档','Show-DuplicateReview'),@('重建搜索索引','Invoke-Rebuild'),@('识别扫描件文字','Invoke-OcrRebuild'))){
+foreach($definition in @(@('管理目录','Show-DirectoryManager'),@('重命名 F2','Rename-SelectedFile'),@('检查重复文档','Show-DuplicateReview'),@('重建搜索索引','Invoke-Rebuild'),@('识别扫描件文字','Invoke-OcrRebuild'),@('运行环境','Show-ApplicationEnvironment'))){
     $item=New-Object Windows.Forms.ToolStripMenuItem;$item.Text=$definition[0];$operation=$definition[1];$item.Add_Click({& $operation}.GetNewClosure());[void]$moreMenu.Items.Add($item)
 }
 $openFolderMenu=New-Object Windows.Forms.ToolStripMenuItem;$openFolderMenu.Text='在资源管理器中打开';$openFolderMenu.Add_Click({Start-Process explorer.exe -ArgumentList ('"'+$script:Root+'"')});[void]$moreMenu.Items.Add($openFolderMenu)

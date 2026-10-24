@@ -26,5 +26,8 @@
   "document-text.ps1",
   "classification-learning.ps1",
   "observability.ps1",
-  "batch-ui.ps1"
+  "batch-ui.ps1",
+  "environment.ps1",
+  "tools/doctor.ps1",
+  "奶龙.code.cmd"
 ]

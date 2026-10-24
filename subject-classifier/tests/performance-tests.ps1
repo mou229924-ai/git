@@ -80,7 +80,7 @@ $ErrorActionPreference='Stop'
 Request-IndexRefresh -Paths @($Document)
 '@
     [IO.File]::WriteAllText($producer,$producerCode,[Text.Encoding]::UTF8)
-    $process=Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ('-NoProfile -ExecutionPolicy Bypass -File "'+$producer+'" -App "'+$scratchApp+'" -Document "'+$crossPath+'"') -PassThru
+    $process=Start-Process powershell.exe -WindowStyle Hidden -ArgumentList ('-NoProfile -ExecutionPolicy RemoteSigned -File "'+$producer+'" -App "'+$scratchApp+'" -Document "'+$crossPath+'"') -PassThru
     if(-not $process.WaitForExit(15000)){ $process.Kill();throw 'Queue producer timed out.' }
     Check-Performance 'A separate process can persist an invalidation batch' ($process.ExitCode -eq 0)
     $process.Dispose()

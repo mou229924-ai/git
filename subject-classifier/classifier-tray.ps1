@@ -57,7 +57,7 @@ function Start-TrayApp {
     $title = [string]$script:Cfg.tray.title
     $rootPath = $script:Root
     $logPath = $script:LogPath
-    $searchVbs = Join-Path $script:AppDir 'search.vbs'
+    # Search launches directly with Windows PowerShell; VBS remains compatibility-only.
     $pauseText = [string]$script:Cfg.tray.menuPause
     $resumeText = [string]$script:Cfg.tray.menuResume
     $runningTip = [string]$script:Cfg.tray.text
@@ -73,7 +73,7 @@ function Start-TrayApp {
     $itemSearch = New-Object System.Windows.Forms.ToolStripMenuItem
     $itemSearch.Text = [string]$script:Cfg.tray.menuSearch
     $itemSearch.Add_Click({
-        Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $searchVbs + '"')
+        Start-ApplicationWindow
     }.GetNewClosure())
     [void]$menu.Items.Add($itemSearch)
 
@@ -118,7 +118,7 @@ function Start-TrayApp {
 
     $notify.ContextMenuStrip = $menu
     $notify.Add_DoubleClick({
-        Start-Process -FilePath 'wscript.exe' -ArgumentList ('"' + $searchVbs + '"')
+        Start-ApplicationWindow
     }.GetNewClosure())
 
     $timer.Start()

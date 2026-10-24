@@ -195,7 +195,7 @@ function Restart-SearchWindow {
         [System.IO.File]::WriteAllText($statePath, ($state | ConvertTo-Json -Depth 4), $script:Utf8)
         $scriptPath = $PSCommandPath
         if ([string]::IsNullOrEmpty($scriptPath)) { $scriptPath = $MyInvocation.MyCommand.Path }
-        Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden', '-File', $scriptPath, '-RestoreFile', $statePath)
+        Start-Process -FilePath 'powershell.exe' -ArgumentList @('-NoProfile', '-ExecutionPolicy', 'RemoteSigned', '-WindowStyle', 'Hidden', '-File', $scriptPath, '-RestoreFile', $statePath)
         $script:RestartTimer.Stop()
         $form.Hide()
         $form.Close()

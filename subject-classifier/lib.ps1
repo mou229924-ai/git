@@ -190,3 +190,5 @@ function Set-RoundedRegion {
 
 . (Join-Path $PSScriptRoot 'document-text.ps1')
 . (Join-Path $PSScriptRoot 'classification-learning.ps1')
+
+. (Join-Path $PSScriptRoot 'environment.ps1')

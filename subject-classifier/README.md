@@ -4,7 +4,7 @@ Windows 本地文件资料库。可自定义目录与分类关键词，初始提
 
 ## 首次配置
 
-从 GitHub Releases 下载 Windows ZIP 后解压，双击 `奶龙.code.vbs`。首次启动会让你选择资料目录，程序自动从随包附带的 `config.example.json` 创建本机配置；以后启动保留原配置。需要 Windows 10/11 和系统自带的 Windows PowerShell 5.1。资料目录应在程序文件夹之外。
+从 GitHub Releases 下载 Windows ZIP 后解压，双击 `奶龙.code.cmd`。首次启动会让你选择资料目录，程序自动从随包附带的 `config.example.json` 创建本机配置；以后启动保留原配置。需要 Windows 10/11 和系统自带的 Windows PowerShell 5.1。资料目录应在程序文件夹之外。
 
 安装包不需要 Git。源码仓库位于 GitHub，安装目录与源码检出目录各有用途；ZIP 中没有 `.git` 属于正常情况。每版编号见 `VERSION`，完整变更见仓库根目录 `CHANGELOG.md`。历史测试数据和升级备份不进入发布包。
 
@@ -12,7 +12,7 @@ Windows 本地文件资料库。可自定义目录与分类关键词，初始提
 
 ## 使用
 
-双击 `奶龙.code.vbs` 打开资料库。`启动监听.vbs` 开启后台分类，托盘菜单可以暂停或退出。
+双击 `奶龙.code.cmd` 打开资料库。`启动监听.vbs` 开启后台分类，托盘菜单可以暂停或退出。
 
 - 拖入普通文件：从原位置移动到资料根目录，待文件稳定后分类。同名文件自动改名。
 - 拖出列表文件到桌面：由 Windows 资源管理器执行移动；也可右键“移到桌面”。
@@ -42,7 +42,7 @@ Windows 本地文件资料库。可自定义目录与分类关键词，初始提
 在 Windows PowerShell 运行一键检查，无需准备个人资料或 PDF：
 
 ```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\check.ps1
+powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File .\tools\check.ps1
 ```
 
 默认执行源码语法/结构检查、隔离安全测试、后台任务和自动生成的图片/PDF 预览测试。没有交互桌面时会明确跳过前台激活和真实键盘输入断言。
@@ -50,7 +50,7 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\check.ps1
 本机完整验证（会短暂显示隔离测试窗口，并验证测试文件的真实回收与恢复）：
 
 ```powershell
-powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tools\check.ps1 -Desktop -Recycle
+powershell.exe -NoProfile -STA -ExecutionPolicy RemoteSigned -File .\tools\check.ps1 -Desktop -Recycle
 ```
 
 测试自动在临时目录建立隔离应用和资料，运行后清理；报告保存到被 Git 排除的 `test-artifacts/latest`。源码配置与删除验证记录不会被一键检查修改，测试不向打印机发送任务。CI 使用同一入口，上传经过筛选的测试报告。
@@ -60,3 +60,5 @@ powershell.exe -NoProfile -STA -ExecutionPolicy Bypass -File .\tools\check.ps1 -
 界面采用目录树、标准文件列表和可调整宽度的预览窗格。去重扫描、搜索、索引更新和预览在后台进程运行。
 
 日志将正常忙锁记为 INFO，同类重复消息节流并累计次数，真实错误保留首条。跨进程日志追加与轮转使用独立锁；回收记录保留在独立审计文件。
+
+启动策略、未签名说明与组件降级方式见 [运行环境说明](RUNTIME.md)。
