@@ -21,7 +21,8 @@ foreach ($relative in $runtimeFiles) {
 # These are the actual independent process loading groups. Their entry-point helpers
 # may share names across processes, but never overwrite another definition in one process.
 $uiFiles = @('search.ps1','library-ui.ps1','extra-ui.ps1','explorer-layout.ps1','batch-ui.ps1','session-ui.ps1','learning-ui.ps1')
-$entryFiles = @('classifier.ps1','background.ps1','preview-host.ps1')
+$uiFiles += @($definitions.Keys | Where-Object { $_ -like 'search-*' })
+$entryFiles = @('classifier.ps1','background.ps1','preview-host.ps1','pdf-text-worker.ps1')
 $shared = @($definitions.Keys | Where-Object { $_ -notin $uiFiles -and $_ -notin $entryFiles -and $_ -notlike 'classifier-*' })
 $groups = @{
     Classifier = @($shared) + @($definitions.Keys | Where-Object { $_ -like 'classifier-*' }) + @('classifier.ps1')

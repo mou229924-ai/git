@@ -311,7 +311,7 @@
     "colPath": "所在目录",
     "colHit": "匹配内容",
     "statLine": "索引 {0} 个文件，其中 {1} 个可搜索内容。",
-    "pdfNote": "Word 等支持正文搜索；PDF 可预览首页，扫描件暂不支持正文搜索。",
+    "pdfNote": "PDF 文字层默认支持正文搜索；扫描页可在“更多”启用本机 OCR。超限或加密文档可查看日志说明。",
     "found": "找到 {0} 个结果，用时 {1} ms。",
     "noResult": "没有找到结果。",
     "indexing": "正在重建索引：{0} / {1}",
@@ -333,5 +333,11 @@
   "learning": {
     "enabled": true,
     "retrainMinutes": 10
+  },
+  "pdfText": {
+    "maxPages": 100,
+    "maxFileMiB": 25,
+    "timeoutSeconds": 15,
+    "maxMemoryMiB": 256
   }
 }

@@ -93,14 +93,22 @@ function New-IndexCandidate {
     $hasText = -not [string]::IsNullOrWhiteSpace($Text)
     $body = $null
     if ($hasText) { $body = New-IndexContentData $Text }
-    return [pscustomobject]@{
-        Entry = [pscustomobject]@{
-            id=(Get-IndexId $rel); rel=$rel; name=$File.Name; subject=(Get-SubjectFromRelPath $rel)
-            size=[long]$File.Length; mtime=$File.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
-            mtimeTicks=[long]$File.LastWriteTime.Ticks; hasText=$hasText; textKey=[string]$body.Key
-        }
-        CacheBytes = $body.Bytes
+    $entry=[pscustomobject]@{
+        id=(Get-IndexId $rel); rel=$rel; name=$File.Name; subject=(Get-SubjectFromRelPath $rel)
+        size=[long]$File.Length; mtime=$File.LastWriteTime.ToString('yyyy-MM-dd HH:mm:ss')
+        mtimeTicks=[long]$File.LastWriteTime.Ticks; hasText=$hasText; textKey=[string]$body.Key
     }
+    if($File.Extension -eq '.pdf'){
+        $entry | Add-Member -NotePropertyName extractorVersion -NotePropertyValue (Get-PdfTextExtractorVersion)
+        if($script:LastPdfTextResult -and $script:LastPdfTextResult.Path -eq $File.FullName){
+            $entry | Add-Member -NotePropertyName extractionStatus -NotePropertyValue ([string]$script:LastPdfTextResult.Status)
+            $entry | Add-Member -NotePropertyName extractionReason -NotePropertyValue ([string]$script:LastPdfTextResult.Reason)
+            $entry | Add-Member -NotePropertyName extractedPages -NotePropertyValue ([int]$script:LastPdfTextResult.ProcessedPages)
+            $entry | Add-Member -NotePropertyName totalPages -NotePropertyValue ([int]$script:LastPdfTextResult.TotalPages)
+            $entry | Add-Member -NotePropertyName textTruncated -NotePropertyValue ([bool]$script:LastPdfTextResult.Truncated)
+        }
+    }
+    return [pscustomobject]@{Entry=$entry;CacheBytes=$body.Bytes}
 }
 
 function Commit-IndexCandidates {
@@ -179,6 +187,11 @@ function Sync-LibraryIndex {
                 } catch { $full=$true }
             }
         }
+        # Old PDFs, including formerly empty entries, migrate once without reparsing other files.
+        $pdfExtractorVersion=Get-PdfTextExtractorVersion
+        foreach($entry in $old.Values){
+            if([IO.Path]::GetExtension([string]$entry.rel) -eq '.pdf' -and [string]$entry.extractorVersion -ne $pdfExtractorVersion){$paths[(Join-Path $script:Root ([string]$entry.rel))]=$true}
+        }
         if (-not $full -and $paths.Count -eq 0 -and $batches.Count -eq 0) {
             return @{ Total=$old.Count; WithText=@($old.Values | Where-Object hasText).Count; Changed=$false; Busy=$false; FullReconcile=$false }
         }
@@ -217,6 +230,7 @@ function Sync-LibraryIndex {
             $rel=Get-RelativePath $file.FullName
             $previous=$old[$rel]
             $unchanged=(-not $Force -and -not $rootChanged -and $previous -and [long]$previous.size -eq $file.Length -and [long]$previous.mtimeTicks -eq $file.LastWriteTime.Ticks)
+            if($file.Extension -eq '.pdf' -and [string]$previous.extractorVersion -ne $pdfExtractorVersion){$unchanged=$false}
             $legacyText=$null
             if ($unchanged) {
                 if (-not $previous.hasText) { continue }

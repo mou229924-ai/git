@@ -23,6 +23,7 @@ try{
  Check 'Environment diagnosis needs no local configuration' (-not [IO.File]::Exists((Join-Path $app 'config.json')))
  Check 'Windows PowerShell 5.1 and window components are detected' ($state.SupportedPowerShell-and $state.WinForms)
  Check 'Optional PDF/OCR capabilities return explicit booleans and reasons' ($state.WindowsPdf-is [bool]-and $state.OcrAvailable-is [bool]-and -not [string]::IsNullOrWhiteSpace($state.OcrReason))
+ Check 'PDF text diagnostics report component-file checks without reading a document' ($state.PdfTextAvailable-is [bool]-and $state.PdfTextCheck-eq 'ComponentFilesOnly'-and -not [string]::IsNullOrWhiteSpace($state.PdfTextReason))
  Check 'Unsigned distribution does not claim a trusted signature' ($state.EntrySignature-ne 'Valid'-and $state.SigningNotice.Contains('未使用可信证书签名'))
  Check 'All execution-policy scopes are reported without policy changes' (@($state.ExecutionPolicyScopes).Count-eq @(Get-ExecutionPolicy -List).Count-and -not $state.PolicyChangesMade)
  $unsigned=Join-Path $app 'downloaded-test.ps1';[IO.File]::WriteAllText($unsigned,'# synthetic unsigned download fixture',$utf8)
@@ -40,8 +41,14 @@ try{
  $script:RegistryFixture=@{}
  function Get-WindowsPdfCapability{return $false}
  function Get-OcrAvailability{return [pscustomobject]@{Available=$false;Languages=@();Reason='Synthetic unavailable OCR language package.'}}
+ function Get-PdfTextAvailability {
+  param([string]$Directory)
+  $script:PdfDiagnosticRequestedDirectory=$Directory
+  return [pscustomobject]@{Available=$false;Engine='Synthetic PDF component fixture';Directory=(Join-Path $Directory 'third-party\pdfpig');Missing=@('missing-fixture.dll');Reason='Synthetic missing PDF parser component.'}
+ }
  $fallback=Get-ApplicationEnvironment -Directory $app
  Check 'Missing preview and OCR components degrade into explicit capability state' (-not $fallback.WindowsPdf-and -not $fallback.OcrAvailable-and -not $fallback.SystemPreviewHandlers['.docx'].Registered)
+ Check 'Missing PDF parser components are reported for the requested directory' (-not $fallback.PdfTextAvailable-and $fallback.PdfTextEngine-eq 'Synthetic PDF component fixture'-and $fallback.PdfTextMissing-contains 'missing-fixture.dll'-and $fallback.PdfTextReason-eq 'Synthetic missing PDF parser component.'-and $script:PdfDiagnosticRequestedDirectory-eq $app)
  Check 'Fallback descriptions preserve default-app opening and filename search' (($fallback.Fallback-join ' ').Contains('默认应用打开')-and ($fallback.Fallback-join ' ').Contains('文件名搜索'))
  $runtime=[IO.File]::ReadAllText((Join-Path $app 'application-files.json'),$utf8)|ConvertFrom-Json
  $runtime=@($runtime)

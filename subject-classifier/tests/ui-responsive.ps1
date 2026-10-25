@@ -53,7 +53,8 @@ try{
     }
     Pump-Ui 300
     $deadline=(Get-Date).AddSeconds(20)
-    while($script:SearchJob -and (Get-Date)-lt $deadline){Pump-Ui 100}
+    # Initial full-text extraction may outlive the first metadata-only search.
+    while(($script:SearchJob -or $script:IndexJob -or $list.Items.Count -eq 0) -and (Get-Date)-lt $deadline){Pump-Ui 100}
     Ui-Check 'Background search completes and populates file list' ($list.Items.Count -gt 0)
     $pdf=Get-Item -LiteralPath $fixturePath
     Show-FilePreview $pdf.FullName

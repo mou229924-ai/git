@@ -7,6 +7,8 @@ foreach($name in @('setup.ps1','config.example.json')){Copy-Item -LiteralPath (J
 $checks=New-Object Collections.ArrayList
 function Check([string]$Name,[bool]$Passed){[void]$checks.Add(@{Name=$Name;Passed=$Passed});Write-Output ($Name+': '+$Passed)}
 try{
+    Check 'The application ships a readable changelog beside its README' ([IO.File]::Exists((Join-Path $source 'CHANGELOG.md')) -and [IO.File]::ReadAllText((Join-Path $source 'README.md')).Contains('[CHANGELOG.md](CHANGELOG.md)'))
+    Check 'The runtime download example does not pin an obsolete release version' ([IO.File]::ReadAllText((Join-Path $source 'RUNTIME.md')) -notmatch 'nailong-code-v[0-9]+\.[0-9]+-windows\.zip')
     $output=@(& powershell.exe -NoProfile -ExecutionPolicy RemoteSigned -File (Join-Path $app 'setup.ps1') -LibraryPath $library -NoPrompt 2>&1)
     Check 'First setup succeeds without Git or an existing local config' ($LASTEXITCODE -eq 0)
     $configPath=Join-Path $app 'config.json'

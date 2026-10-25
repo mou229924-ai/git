@@ -146,7 +146,8 @@ function Get-FileText {
     param([string]$Path, [int]$Max = 0)
     if ($Max -le 0) { $Max = [int]$script:Cfg.contentMaxChars }
     $ext = [System.IO.Path]::GetExtension($Path).ToLowerInvariant()
-    if($ext -in @('.pdf','.png','.jpg','.jpeg','.bmp','.tif','.tiff')){return Get-OcrDocumentText -Path $Path -Max $Max}
+    if($ext -eq '.pdf'){return Get-PdfDocumentText -Path $Path -Max $Max}
+    if($ext -in @('.png','.jpg','.jpeg','.bmp','.tif','.tiff')){return Get-OcrDocumentText -Path $Path -Max $Max}
     if ($ext -eq '.zip') {
         return Get-ZipInnerText -Path $Path -Max $Max
     }

@@ -8,7 +8,11 @@ $scratchRoot=Join-Path $runDir 'library'
 [void][IO.Directory]::CreateDirectory($scratchApp)
 [void][IO.Directory]::CreateDirectory($scratchRoot)
 $runtimeFiles=[IO.File]::ReadAllText((Join-Path $sourceDir 'application-files.json'),$script:Utf8) | ConvertFrom-Json
-foreach($runtimeFile in $runtimeFiles){Copy-Item -LiteralPath (Join-Path $sourceDir $runtimeFile) -Destination $scratchApp}
+foreach($runtimeFile in $runtimeFiles){
+    $destination=Join-Path $scratchApp $runtimeFile
+    [void][IO.Directory]::CreateDirectory((Split-Path $destination -Parent))
+    Copy-Item -LiteralPath (Join-Path $sourceDir $runtimeFile) -Destination $destination
+}
 Copy-Item -LiteralPath (Join-Path $sourceDir 'application-files.json') -Destination $scratchApp
 $script:AppDir=$scratchApp
 $script:Root=$scratchRoot

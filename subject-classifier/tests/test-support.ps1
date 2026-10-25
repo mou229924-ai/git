@@ -75,7 +75,7 @@ function New-IsolatedTestApplication {
         New-Item -ItemType Directory -Path (Split-Path $destination -Parent) -Force | Out-Null
         Copy-Item -LiteralPath (Join-Path $SourceDir $relative) -Destination $destination
     }
-    foreach ($name in @('application-files.json','config.example.json')) { Copy-Item -LiteralPath (Join-Path $SourceDir $name) -Destination $app -Force }
+    foreach ($name in @('application-files.json','config.example.json','README.md','RUNTIME.md','CHANGELOG.md')) { Copy-Item -LiteralPath (Join-Path $SourceDir $name) -Destination $app -Force }
     foreach ($directory in @('tests','tools')) {
         $from = Join-Path $SourceDir $directory
         if ([IO.Directory]::Exists($from)) {

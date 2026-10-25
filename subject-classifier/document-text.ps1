@@ -1,4 +1,6 @@
-﻿# Optional local OCR. Disabled by default; indexing and explicit rebuild run outside the UI process.
+﻿. (Join-Path $PSScriptRoot 'pdf-text.ps1')
+
+# Optional local OCR is used for images and PDF pages without a text layer.
 function Get-OcrAvailability {
     try{
         Add-Type -AssemblyName System.Runtime.WindowsRuntime
@@ -38,7 +40,7 @@ function Get-OcrImageText {
 }
 
 function Get-OcrDocumentText {
-    param([string]$Path,[int]$Max=60000)
+    param([string]$Path,[int]$Max=60000,[int[]]$PageIndices)
     if(-not $script:Cfg.ocr -or -not $script:Cfg.ocr.enabled){return $null}
     $extension=[IO.Path]::GetExtension($Path).ToLowerInvariant()
     if($extension -notin @('.pdf','.png','.jpg','.jpeg','.bmp','.tif','.tiff')){return $null}
@@ -52,7 +54,8 @@ function Get-OcrDocumentText {
         $text=''
         if($extension -eq '.pdf'){
             $limit=2;if($script:Cfg.ocr.maxPages){$limit=[Math]::Max(1,[Math]::Min(10,[int]$script:Cfg.ocr.maxPages))}
-            for($page=0;$page -lt $limit;$page++){
+            $selected=@(0..($limit-1));if($PSBoundParameters.ContainsKey('PageIndices')){$selected=@($PageIndices | Where-Object {$_ -ge 0} | Select-Object -Unique -First $limit)}
+            foreach($page in $selected){
                 $render=Get-PdfPageImage -Path $Path -PageIndex $page
                 $temporary=Join-Path ([IO.Path]::GetTempPath()) ('nailong-ocr-'+[guid]::NewGuid().ToString('N')+'.png')
                 try{$render.Image.Save($temporary,[Drawing.Imaging.ImageFormat]::Png);$text+=(Get-OcrImageText -Path $temporary -Seconds $seconds)+[Environment]::NewLine}

@@ -1,0 +1,125 @@
+[
+  {
+    "Source": "https://api.nuget.org/v3-flatcontainer/pdfpig/0.1.16/pdfpig.0.1.16.nupkg",
+    "Framework": "net462",
+    "Id": "PdfPig",
+    "Version": "0.1.16",
+    "PackageSHA256": "D67171846EA8C28F50359137065FEC4514266D7A32B23EAE6C5F2EBED8FFCFC4",
+    "Files": [
+      {
+        "SHA256": "8F01694551609D47A30C7CC721A661696B348FF3A1119603D828857A0C6092CC",
+        "Bytes": 50176,
+        "File": "UglyToad.PdfPig.Core.dll"
+      },
+      {
+        "SHA256": "2E84FD49C0C86DD61E7248B10B5F19FF6432C1CA3A2CA7318957698C44C72280",
+        "Bytes": 246784,
+        "File": "UglyToad.PdfPig.DocumentLayoutAnalysis.dll"
+      },
+      {
+        "SHA256": "9E7CC3E3AA2574850FFFEF6FD4CD898F75D72D4FE166C86C638F982B80D297C9",
+        "Bytes": 1090048,
+        "File": "UglyToad.PdfPig.Fonts.dll"
+      },
+      {
+        "SHA256": "E444EFFE9B015120106B6A4DE808632BEC6EEF5147900F63CE0230561FD43ABC",
+        "Bytes": 23040,
+        "File": "UglyToad.PdfPig.Tokenization.dll"
+      },
+      {
+        "SHA256": "4A72A443FAA3BA8DDAF718B0378D9B5D9B863890E584BC8082FB7FE14F5E59B5",
+        "Bytes": 48128,
+        "File": "UglyToad.PdfPig.Tokens.dll"
+      },
+      {
+        "SHA256": "9CF20B52B968694DBC2696FD7C5575B9A86ACC3CAA61686F8E80E3AC6A5E0AEB",
+        "Bytes": 4237312,
+        "File": "UglyToad.PdfPig.dll"
+      }
+    ]
+  },
+  {
+    "Source": "https://api.nuget.org/v3-flatcontainer/microsoft.bcl.hashcode/6.0.0/microsoft.bcl.hashcode.6.0.0.nupkg",
+    "Framework": "net462",
+    "Id": "Microsoft.Bcl.HashCode",
+    "Version": "6.0.0",
+    "PackageSHA256": "F3B9B2BAB0BF8CC717D5FDF6D7AEE3EC54E36D9E85BD41347ACAE161319CBD6B",
+    "Files": [
+      {
+        "SHA256": "3A4E851EE5FC0F6182AA5A3D65DC56FCD6979B65334B5C3B92FBDC791457C0AB",
+        "Bytes": 26920,
+        "File": "Microsoft.Bcl.HashCode.dll"
+      }
+    ]
+  },
+  {
+    "Source": "https://api.nuget.org/v3-flatcontainer/system.memory/4.6.0/system.memory.4.6.0.nupkg",
+    "Framework": "net462",
+    "Id": "System.Memory",
+    "Version": "4.6.0",
+    "PackageSHA256": "3A10042B350CE9E11A1FDF4370668CCF6A452C6FEAFCDE0A556AAA881614385A",
+    "Files": [
+      {
+        "SHA256": "B8FE216AFF0F6D162F8EEFE7BE1712162B7D8199E20CE2E70FFAC36C7CE20A4C",
+        "Bytes": 145192,
+        "File": "System.Memory.dll"
+      }
+    ]
+  },
+  {
+    "Source": "https://api.nuget.org/v3-flatcontainer/system.valuetuple/4.5.0/system.valuetuple.4.5.0.nupkg",
+    "Framework": "net461",
+    "Id": "System.ValueTuple",
+    "Version": "4.5.0",
+    "PackageSHA256": "9E21FA9767D4E76BC0CEE065C1D40CC34384A114BFEC4D70E6C981168A926802",
+    "Files": [
+      {
+        "SHA256": "E4774AEAD2793F440E0CED6C097048423D118E0B6ED238C6FE5B456ACB07817F",
+        "Bytes": 78992,
+        "File": "System.ValueTuple.dll"
+      }
+    ]
+  },
+  {
+    "Source": "https://api.nuget.org/v3-flatcontainer/system.buffers/4.6.0/system.buffers.4.6.0.nupkg",
+    "Framework": "net462",
+    "Id": "System.Buffers",
+    "Version": "4.6.0",
+    "PackageSHA256": "736425805075E8895F066B3960BB1308543F41E2A84BAA61D5AF6675192AFC97",
+    "Files": [
+      {
+        "SHA256": "3AF1E07305BED0ABE0CF32D9854E0A7F5F470216ADEE1B87D02350BE09D31B35",
+        "Bytes": 23856,
+        "File": "System.Buffers.dll"
+      }
+    ]
+  },
+  {
+    "Source": "https://api.nuget.org/v3-flatcontainer/system.numerics.vectors/4.6.0/system.numerics.vectors.4.6.0.nupkg",
+    "Framework": "net462",
+    "Id": "System.Numerics.Vectors",
+    "Version": "4.6.0",
+    "PackageSHA256": "7CA4B7B964361E647AF6F3610C7A8F2D834EB77AA98E25903976431EF444D475",
+    "Files": [
+      {
+        "SHA256": "22C84BE385FE8BA6D0E0138952748F28D781FCE36078B5A7AED91A6104BCD99B",
+        "Bytes": 110344,
+        "File": "System.Numerics.Vectors.dll"
+      }
+    ]
+  },
+  {
+    "Source": "https://api.nuget.org/v3-flatcontainer/system.runtime.compilerservices.unsafe/6.1.0/system.runtime.compilerservices.unsafe.6.1.0.nupkg",
+    "Framework": "net462",
+    "Id": "System.Runtime.CompilerServices.Unsafe",
+    "Version": "6.1.0",
+    "PackageSHA256": "372AAAA51707BA6CD2C69B2044382E0F9486C1D50D1C16E8D0E39DCCB4C8CC25",
+    "Files": [
+      {
+        "SHA256": "2D6F419D641682D8EFC4A40E850D2E85DE519D6823B93DAF2AEEE63206D4E32D",
+        "Bytes": 19224,
+        "File": "System.Runtime.CompilerServices.Unsafe.dll"
+      }
+    ]
+  }
+]
