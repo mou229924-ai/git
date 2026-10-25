@@ -38,6 +38,7 @@ $script:ColText2=[Drawing.Color]::FromArgb(126,114,88)
 $script:ColSurface=[Drawing.Color]::FromArgb(250,241,212)
 $checks=New-Object Collections.ArrayList
 $script:FocusDiagnostics=New-Object Collections.ArrayList
+$script:DirectoryInputDiagnostics=New-Object Collections.ArrayList
 $savedInputLanguage=[Windows.Forms.InputLanguage]::CurrentInputLanguage
 $asciiInputLanguage=@([Windows.Forms.InputLanguage]::InstalledInputLanguages|Where-Object {$_.Culture.Name -eq 'en-US'}|Select-Object -First 1)
 if(-not $Headless -and $asciiInputLanguage.Count){[Windows.Forms.InputLanguage]::CurrentInputLanguage=$asciiInputLanguage[0]}
@@ -133,8 +134,28 @@ try {
                 $dialog=@([Windows.Forms.Application]::OpenForms) | Where-Object { $_.Text -eq '奶龙select · 管理目录与分类规则' } | Select-Object -First 1
                 if($dialog -and -not $state.Handled) {
                     $box=(All-Controls $dialog) | Where-Object { $_ -is [Windows.Forms.ComboBox] } | Select-Object -First 1
+                    if($state.TypedSent) {
+                        # SendWait may finish before posted text is consumed. Keep submission separate,
+                        # just as the nested input test does, and never submit into a different window.
+                        if($state.SendingText){return}
+                        $inputReady=$box.Text -ceq $state.ExpectedText -and $box.ContainsFocus -and [DialogTestNative]::GetForegroundWindow() -eq $dialog.Handle
+                        if($inputReady) {
+                            $state.Handled=$true
+                            Check ($state.Mode+': keyboard input is complete before submitting') $true
+                            [void]$state.InputEvents.Add(@{Kind='Submit';Text=[string]$box.Text;Key=$state.SubmitKey;Utc=[datetime]::UtcNow.ToString('o')})
+                            [Windows.Forms.SendKeys]::SendWait($state.SubmitKey)
+                        } elseif((Get-Date) -ge $state.TypedDeadline) {
+                            $state.Handled=$true
+                            Check ($state.Mode+': keyboard input is complete before submitting') $false
+                            $dialog.DialogResult='Cancel';$dialog.Close()
+                        }
+                        return
+                    }
                     if(-not $state.FocusDeadline) {
                         if(-not $Headless){$box.ImeMode='Disable'}
+                        $state.InputEvents=New-Object Collections.ArrayList
+                        $box.Add_TextChanged({[void]$state.InputEvents.Add(@{Kind='TextChanged';Text=[string]$box.Text;Utc=[datetime]::UtcNow.ToString('o')})}.GetNewClosure())
+                        $dialog.Add_FormClosing({[void]$state.InputEvents.Add(@{Kind='Closing';Text=[string]$box.Text;Result=[string]$dialog.DialogResult;Utc=[datetime]::UtcNow.ToString('o')})}.GetNewClosure())
                         $state.FocusDeadline=(Get-Date).AddSeconds(3)
                         Check ($state.Mode+': directory manager is owned by the library') ($dialog.Owner -eq $form)
                     }
@@ -156,11 +177,16 @@ try {
                             if($state.Mode -eq 'save') {
                                 Check 'Enter is connected to saving the directory' ($null -ne $dialog.AcceptButton)
                                 if($Headless) { $box.Text=$text; $dialog.AcceptButton.PerformClick() }
-                                else { if($asciiInputLanguage.Count){[Windows.Forms.InputLanguage]::CurrentInputLanguage=$asciiInputLanguage[0]};[Windows.Forms.SendKeys]::SendWait($text+'{ENTER}') }
                             } else {
                                 Check ($state.Mode+': Escape can cancel the dialog') ($null -ne $dialog.CancelButton)
                                 if($Headless) { $box.Text=$text; $dialog.CancelButton.PerformClick() }
-                                else { [Windows.Forms.SendKeys]::SendWait($text+'{ESC}') }
+                            }
+                            if(-not $Headless) {
+                                if($asciiInputLanguage.Count){[Windows.Forms.InputLanguage]::CurrentInputLanguage=$asciiInputLanguage[0]}
+                                $state.ExpectedText=$text;$state.SubmitKey=if($state.Mode -eq 'save'){'{ENTER}'}else{'{ESC}'}
+                                $state.TypedSent=$true;$state.TypedDeadline=(Get-Date).AddSeconds(3)
+                                $state.Handled=$false;$state.SendingText=$true
+                                try{[Windows.Forms.SendKeys]::SendWait($text)}finally{$state.SendingText=$false}
                             }
                         } else { $dialog.Close() }
                     }
@@ -170,6 +196,9 @@ try {
         }.GetNewClosure())
         $timer.Start()
         try { Show-DirectoryManager } finally { $timer.Stop(); $timer.Dispose() }
+        $directoryInput=@{Mode=$mode;Events=@($state.InputEvents);CreatedDirectories=@(Get-ChildItem -LiteralPath $script:Root -Directory | ForEach-Object Name)}
+        [void]$script:DirectoryInputDiagnostics.Add($directoryInput)
+        Write-Output ('DIALOG INPUT '+($directoryInput|ConvertTo-Json -Depth 5 -Compress))
         Check ($mode+': modal state is released after closing') (-not $script:UiUpdating -and $form.Enabled)
     }
     Check 'Saving creates the actual test directory' (Test-Path -LiteralPath (Join-Path $script:Root 'directory-save') -PathType Container)
@@ -181,7 +210,7 @@ try {
     $form.Close(); $form.Dispose()
     if(-not $Headless -and $savedInputLanguage){[Windows.Forms.InputLanguage]::CurrentInputLanguage=$savedInputLanguage}
 }
-$report=@{Passed=@($checks | Where-Object Passed).Count;Failed=@($checks | Where-Object {-not $_.Passed}).Count;Checks=@($checks.ToArray());NestedTestResult=$script:NestedTestResult;FocusDiagnostics=@($script:FocusDiagnostics.ToArray());Headless=[bool]$Headless;SkippedInteractiveAssertions=@($skipped.ToArray())}
+$report=@{Passed=@($checks | Where-Object Passed).Count;Failed=@($checks | Where-Object {-not $_.Passed}).Count;Checks=@($checks.ToArray());NestedTestResult=$script:NestedTestResult;FocusDiagnostics=@($script:FocusDiagnostics.ToArray());DirectoryInputDiagnostics=@($script:DirectoryInputDiagnostics.ToArray());Headless=[bool]$Headless;SkippedInteractiveAssertions=@($skipped.ToArray())}
 if(-not $Output){$Output=Join-Path $PSScriptRoot 'dialog-results.json'}
 [IO.File]::WriteAllText($Output,($report | ConvertTo-Json -Depth 5),$script:Utf8)
 Write-Output ('TOTAL passed='+$report.Passed+' failed='+$report.Failed)
