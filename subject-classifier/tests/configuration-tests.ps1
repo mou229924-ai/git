@@ -61,6 +61,28 @@ try {
     Write-Config $zero @{schemaVersion=0;inbox=$expectedRoot;subjects=@();ocr=@{enabled=$true}}
     $zeroConfig=Read-ApplicationConfiguration -Path $zero -TemplatePath $template -StateDirectory $zeroState
     Check 'Schema zero migrates while preserving an explicitly enabled OCR choice' ($zeroConfig.schemaVersion -eq 1 -and $zeroConfig.ocr.enabled -and $zeroConfig.ocr.maxPages -eq 2)
+    $brandPath=Join-Path $run 'rename-defaults.json'
+    Write-Config $brandPath @{
+        schemaVersion=1;inbox=$expectedRoot;custom=@{retained='yes'}
+        popup=@{title='奶龙.code · 文件分类'}
+        tray=@{title='奶龙.code';text='奶龙.code - 监听中';textPaused='奶龙.code - 已暂停'}
+        search=@{title='奶龙.code'}
+    }
+    $renamed=Read-ApplicationConfiguration -Path $brandPath -TemplatePath $template
+    Check 'Existing shipped labels migrate to the new application name' ($renamed.popup.title -ceq '奶龙select · 文件分类' -and $renamed.tray.title -ceq '奶龙select' -and $renamed.tray.text -ceq '奶龙select - 监听中' -and $renamed.tray.textPaused -ceq '奶龙select - 已暂停' -and $renamed.search.title -ceq '奶龙select')
+    Check 'The name change preserves schema, library and unknown fields' ($renamed.schemaVersion -eq 1 -and $renamed.inbox -eq $expectedRoot -and $renamed.custom.retained -ceq 'yes')
+    $brandHash=(Get-FileHash -LiteralPath $brandPath -Algorithm SHA256).Hash
+    $null=Read-ApplicationConfiguration -Path $brandPath -TemplatePath $template
+    Check 'A second name migration leaves persisted bytes unchanged' ((Get-FileHash -LiteralPath $brandPath -Algorithm SHA256).Hash -eq $brandHash)
+    $customPath=Join-Path $run 'rename-custom.json'
+    Write-Config $customPath @{
+        schemaVersion=1;inbox=$expectedRoot
+        popup=@{title='我的资料分类'}
+        tray=@{title='个人工具';text='奶龙.code - 监听中';textPaused='暂时休息'}
+        search=@{title='奶龙.code（自定义）'}
+    }
+    $custom=Read-ApplicationConfiguration -Path $customPath -TemplatePath $template
+    Check 'Custom labels remain intact while a mixed shipped label migrates' ($custom.popup.title -ceq '我的资料分类' -and $custom.tray.title -ceq '个人工具' -and $custom.tray.text -ceq '奶龙select - 监听中' -and $custom.tray.textPaused -ceq '暂时休息' -and $custom.search.title -ceq '奶龙.code（自定义）')
 } catch {Check ('Unhandled configuration test error: '+$_.Exception.Message) $false;Write-Output $_.ScriptStackTrace}
 $report=@{Passed=@($checks|Where-Object Passed).Count;Failed=@($checks|Where-Object {-not $_.Passed}).Count;Checks=@($checks.ToArray());Scratch=$run}
 if(-not $Output){$Output=Join-Path $PSScriptRoot 'configuration-results.json'}

@@ -63,7 +63,7 @@ function Show-ClassificationLearningWarning {
     $owner.TopMost=$true; $owner.ShowInTaskbar=$false; $owner.Opacity=0
     try {
         $owner.Show()
-        [void][Windows.Forms.MessageBox]::Show($owner,('文件已移动，但没有记住关键词。' + [Environment]::NewLine + $Message),'奶龙.code · 分类规则',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Information)
+        [void][Windows.Forms.MessageBox]::Show($owner,('文件已移动，但没有记住关键词。' + [Environment]::NewLine + $Message),'奶龙select · 分类规则',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Information)
     } finally { $owner.Close(); $owner.Dispose() }
 }
 

@@ -38,6 +38,6 @@ try {
 } catch {
     if($NoPrompt){Write-Error $_.Exception.Message;exit 1}
     Add-Type -AssemblyName System.Windows.Forms
-    [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'奶龙.code · 启动未完成','OK','Error')
+    [void][Windows.Forms.MessageBox]::Show($_.Exception.Message,'奶龙select · 启动未完成','OK','Error')
     exit 1
 }

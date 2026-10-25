@@ -66,7 +66,7 @@ try{
     $dialogProbe=@{Deadline=(Get-Date).AddSeconds(5);Handled=$false}
     $dialogTimer=New-Object Windows.Forms.Timer; $dialogTimer.Interval=200
     $dialogTimer.Add_Tick({
-        $directoryDialog=@([Windows.Forms.Application]::OpenForms) | Where-Object {$_.Text -eq '奶龙.code · 管理目录与分类规则'} | Select-Object -First 1
+        $directoryDialog=@([Windows.Forms.Application]::OpenForms) | Where-Object {$_.Text -eq '奶龙select · 管理目录与分类规则'} | Select-Object -First 1
         if($directoryDialog -and -not $dialogProbe.Handled){
             $dialogProbe.Handled=$true
             $directoryInput=$directoryDialog.Controls[0].Controls | Where-Object {$_ -is [Windows.Forms.ComboBox]} | Select-Object -First 1

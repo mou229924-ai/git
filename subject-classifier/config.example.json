@@ -252,6 +252,7 @@
     "setup.ps1",
     "search.ps1",
     "奶龙.code.vbs",
+    "奶龙select.cmd",
     "启动监听.vbs",
     "search.vbs"
   ],
@@ -264,7 +265,7 @@
     ".!ut"
   ],
   "popup": {
-    "title": "奶龙.code · 文件分类",
+    "title": "奶龙select · 文件分类",
     "prompt": "请选择这个文件所属的目录（文件夹不存在会自动创建）：",
     "unknown": "没有找到明确的目录关键词，请手动选择：",
     "ambiguous": "文件名或内容里同时出现了多个目录，无法确定，请手动选择：",
@@ -281,9 +282,9 @@
     "progress": "正在整理文件夹：{0} / {1}"
   },
   "tray": {
-    "text": "奶龙.code - 监听中",
-    "textPaused": "奶龙.code - 已暂停",
-    "title": "奶龙.code",
+    "text": "奶龙select - 监听中",
+    "textPaused": "奶龙select - 已暂停",
+    "title": "奶龙select",
     "started": "正在监听资料目录。双击托盘图标打开资料库，可拖入文件、搜索和预览。",
     "alreadyRunning": "已经在后台运行。\n\n请查看任务栏右下角的托盘图标（可能被折叠在 ^ 里），右键可搜索、暂停或退出。",
     "menuOpen": "打开分类文件夹",
@@ -294,7 +295,7 @@
     "menuExit": "退出"
   },
   "search": {
-    "title": "奶龙.code",
+    "title": "奶龙select",
     "placeholder": "输入关键词，例如：中和反应 溶解度",
     "subtitle": "在 {0} 个文件中搜索文件名和内容",
     "queryLabel": "关键词（空格分隔多个词）：",

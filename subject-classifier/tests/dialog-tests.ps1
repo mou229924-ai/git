@@ -130,7 +130,7 @@ try {
         $timer=New-Object Windows.Forms.Timer; $timer.Interval=200
         $timer.Add_Tick({
             try {
-                $dialog=@([Windows.Forms.Application]::OpenForms) | Where-Object { $_.Text -eq '奶龙.code · 管理目录与分类规则' } | Select-Object -First 1
+                $dialog=@([Windows.Forms.Application]::OpenForms) | Where-Object { $_.Text -eq '奶龙select · 管理目录与分类规则' } | Select-Object -First 1
                 if($dialog -and -not $state.Handled) {
                     $box=(All-Controls $dialog) | Where-Object { $_ -is [Windows.Forms.ComboBox] } | Select-Object -First 1
                     if(-not $state.FocusDeadline) {

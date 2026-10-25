@@ -45,6 +45,20 @@ function Read-ApplicationConfiguration {
         if($schema -gt $SupportedSchema){throw '配置来自更高版本，请使用对应的新程序或原配置备份。'}
         $defaults=[IO.File]::ReadAllText($TemplatePath,$utf8) | ConvertFrom-Json
         Merge-ConfigurationDefaults $config $defaults
+        # Rename only shipped labels; preserve user-written titles and stable state paths.
+        foreach($label in @(
+            @('popup','title','奶龙.code · 文件分类','奶龙select · 文件分类'),
+            @('tray','text','奶龙.code - 监听中','奶龙select - 监听中'),
+            @('tray','textPaused','奶龙.code - 已暂停','奶龙select - 已暂停'),
+            @('tray','title','奶龙.code','奶龙select'),
+            @('search','title','奶龙.code','奶龙select')
+        )){
+            $section=$config.PSObject.Properties[$label[0]]
+            if($section -and $section.Value -is [Management.Automation.PSCustomObject]){
+                $property=$section.Value.PSObject.Properties[$label[1]]
+                if($property -and $property.Value -ceq $label[2]){$property.Value=$label[3]}
+            }
+        }
         if(-not $config.PSObject.Properties['ocr']){$config | Add-Member -NotePropertyName ocr -NotePropertyValue ([pscustomobject]@{enabled=$false;maxPages=2;maxFileMiB=25;timeoutSeconds=12})}
         if(-not $config.PSObject.Properties['schemaVersion']){$config | Add-Member -NotePropertyName schemaVersion -NotePropertyValue $SupportedSchema}
         $config.schemaVersion=$SupportedSchema

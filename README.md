@@ -1,13 +1,13 @@
-# 奶龙.code
+# 奶龙select
 
 面向 Windows 的本地文件资料库，集中搜索、预览、分类和整理文档。暖黄色界面，目录和分类规则可以自定义。
 
-![奶龙.code](subject-classifier/assets/logo64.png)
+![奶龙select](subject-classifier/assets/logo64.png)
 
 ## 快速开始
 
 1. 从 [版本发布页](https://github.com/mou229924-ai/git/releases) 下载 Windows ZIP 并解压。
-2. 进入 `subject-classifier`，双击 `奶龙.code.cmd`。
+2. 进入 `subject-classifier`，双击 `奶龙select.cmd`。
 3. 首次启动选择自己的资料文件夹，之后会保留配置。
 
 需要 Windows 10/11、Windows PowerShell 5.1 和系统自带的 .NET Framework。Office 文档原版式预览、打印依赖已安装的对应应用或系统预览组件。

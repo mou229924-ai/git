@@ -61,8 +61,10 @@ try{
  Check 'Runtime entry, background, preview and restart paths no longer request Bypass' ($bypass.Count-eq 0)
  $tray=[IO.File]::ReadAllText((Join-Path $app 'classifier-tray.ps1'),$utf8)
  Check 'Tray search opens PowerShell directly without requiring VBS' ($tray.Contains('Start-ApplicationWindow')-and -not $tray.Contains('wscript.exe'))
- $cmd=[IO.File]::ReadAllText((Join-Path $app '奶龙.code.cmd'),[Text.Encoding]::ASCII)
- Check 'Default CMD uses RemoteSigned and catches startup security failures' ($cmd.Contains('RemoteSigned')-and $cmd.Contains('NAILONG_ENTRY')-and $cmd.Contains('-Command')-and $cmd.Contains('catch')-and $cmd.Contains('MessageBox')-and $cmd.Contains('Unblock')-and -not $cmd.Contains('wscript'))
+ foreach($entryName in @('奶龙select.cmd','奶龙.code.cmd')){
+  $cmd=[IO.File]::ReadAllText((Join-Path $app $entryName),[Text.Encoding]::ASCII)
+  Check ($entryName+' uses RemoteSigned and catches startup security failures') ($cmd.Contains('RemoteSigned')-and $cmd.Contains('NAILONG_ENTRY')-and $cmd.Contains('-Command')-and $cmd.Contains('catch')-and $cmd.Contains('MessageBox')-and $cmd.Contains('Unblock')-and -not $cmd.Contains('wscript'))
+ }
  $startupPath=Join-Path $app '开机自启-开启.vbs'
  if([IO.File]::Exists($startupPath)){
   $startup=[IO.File]::ReadAllText($startupPath,$utf8)

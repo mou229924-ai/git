@@ -86,7 +86,7 @@ function Show-ApplicationEnvironment {
     if(-not $s.WinForms){return ($lines-join [Environment]::NewLine)}
     if(-not $Owner){$Owner=[Windows.Forms.Form]::ActiveForm}
     if($Owner-and $Owner.IsDisposed){$Owner=$null}
-    [void][Windows.Forms.MessageBox]::Show($Owner,($lines-join [Environment]::NewLine),'奶龙.code · 运行环境',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Information)
+    [void][Windows.Forms.MessageBox]::Show($Owner,($lines-join [Environment]::NewLine),'奶龙select · 运行环境',[Windows.Forms.MessageBoxButtons]::OK,[Windows.Forms.MessageBoxIcon]::Information)
 }
 function Start-ApplicationWindow {
     $entry=Join-Path $script:AppDir 'setup.ps1'

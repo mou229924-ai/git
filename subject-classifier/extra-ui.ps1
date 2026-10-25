@@ -45,7 +45,7 @@ function Show-DirectoryManager {
     if ($script:UiUpdating) { return }
     $script:UiUpdating=$true
     $dialog=New-Object Windows.Forms.Form
-    $dialog.Text='奶龙.code · 管理目录与分类规则'
+    $dialog.Text='奶龙select · 管理目录与分类规则'
     $dialog.Size=New-Object Drawing.Size((S 680),(S 410))
     $dialog.StartPosition='CenterParent'; $dialog.FormBorderStyle='FixedDialog'; $dialog.MaximizeBox=$false; $dialog.MinimizeBox=$false; $dialog.Font=$form.Font; $dialog.BackColor=$script:ColBg
     $layout=New-Object Windows.Forms.TableLayoutPanel

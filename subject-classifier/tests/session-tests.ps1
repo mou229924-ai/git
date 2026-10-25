@@ -95,12 +95,25 @@ try{
     [Nailong.NativeShortcut]::Create($ownPath,$shellTarget,('-File "'+(Join-Path $app 'classifier.ps1')+'"'),$app,'本程序旧启动入口','',7)
     [Nailong.NativeShortcut]::Create($otherPath,(Join-Path $env:SystemRoot 'System32\notepad.exe'),'',$run,'无关程序入口','',1)
     $otherHash=(Get-FileHash -LiteralPath $otherPath -Algorithm SHA256).Hash
+    $legacyDesktop=Join-Path $desktop '奶龙.code.lnk'
+    $desktopArguments='-NoProfile -STA -ExecutionPolicy RemoteSigned -WindowStyle Hidden -File "'+(Join-Path $app 'setup.ps1')+'" -Launch'
+    [Nailong.NativeShortcut]::Create($legacyDesktop,$shellTarget,$desktopArguments,$app,'旧的本应用桌面入口','',7)
     & (Join-Path $SourceDir 'tools\install-desktop.ps1') -ApplicationDirectory $app -DesktopDirectory $desktop -StartupDirectory $startup
-    $desktopPath=Join-Path $desktop '奶龙.code.lnk'
+    $desktopPath=Join-Path $desktop '奶龙select.lnk'
     $desktopInfo=[Nailong.NativeShortcut]::Read($desktopPath)
-    Check 'Installer creates the integrated desktop shortcut' ([IO.File]::Exists($desktopPath)-and $desktopInfo.TargetPath.Equals($shellTarget,[StringComparison]::OrdinalIgnoreCase)-and $desktopInfo.Arguments.Contains((Join-Path $app 'setup.ps1'))-and $desktopInfo.Arguments.Contains('RemoteSigned')-and $desktopInfo.WorkingDirectory.Equals($app,[StringComparison]::OrdinalIgnoreCase)-and $desktopInfo.Description-eq '奶龙.code：搜索、预览与自动分类')
+    Check 'Installer creates the renamed integrated desktop shortcut' ([IO.File]::Exists($desktopPath)-and $desktopInfo.TargetPath.Equals($shellTarget,[StringComparison]::OrdinalIgnoreCase)-and $desktopInfo.Arguments.Contains((Join-Path $app 'setup.ps1'))-and $desktopInfo.Arguments.Contains('RemoteSigned')-and $desktopInfo.WorkingDirectory.Equals($app,[StringComparison]::OrdinalIgnoreCase)-and $desktopInfo.Description-eq '奶龙select：搜索、预览与自动分类')
+    Check 'Installer removes the old name only after verifying its replacement' (-not [IO.File]::Exists($legacyDesktop)-and [IO.File]::Exists($desktopPath))
     Check 'Installer disables this application autostart' (-not [IO.File]::Exists($ownPath))
     Check 'Installer preserves unrelated startup entries' ([IO.File]::Exists($otherPath)-and (Get-FileHash -LiteralPath $otherPath -Algorithm SHA256).Hash-eq $otherHash-and [Nailong.NativeShortcut]::Read($otherPath).Description-eq '无关程序入口')
+    [Nailong.NativeShortcut]::Create($legacyDesktop,$shellTarget,('-File "'+(Join-Path $run 'other\setup.ps1')+'" -Launch'),$run,'同名其他应用入口','',7)
+    $legacyOtherHash=(Get-FileHash -LiteralPath $legacyDesktop -Algorithm SHA256).Hash
+    & (Join-Path $SourceDir 'tools\install-desktop.ps1') -ApplicationDirectory $app -DesktopDirectory $desktop -StartupDirectory $startup
+    Check 'Installer preserves an old-name shortcut belonging to another application' ([IO.File]::Exists($legacyDesktop)-and (Get-FileHash -LiteralPath $legacyDesktop -Algorithm SHA256).Hash-eq $legacyOtherHash)
+    [Nailong.NativeShortcut]::Create($desktopPath,(Join-Path $env:SystemRoot 'System32\notepad.exe'),'',$run,'新名称被其他程序占用','',1)
+    $conflictHash=(Get-FileHash -LiteralPath $desktopPath -Algorithm SHA256).Hash
+    $conflictRejected=$false
+    try{& (Join-Path $SourceDir 'tools\install-desktop.ps1') -ApplicationDirectory $app -DesktopDirectory $desktop -StartupDirectory $startup}catch{$conflictRejected=$_.Exception.Message.Contains('同名快捷方式')}
+    Check 'Installer rejects a conflicting new name without replacing either unrelated shortcut' ($conflictRejected-and (Get-FileHash -LiteralPath $desktopPath -Algorithm SHA256).Hash-eq $conflictHash-and (Get-FileHash -LiteralPath $legacyDesktop -Algorithm SHA256).Hash-eq $legacyOtherHash)
     Check 'Session and Unicode shortcut installation preserve original document bytes' ([Convert]::ToBase64String([IO.File]::ReadAllBytes($originalDocument))-eq [Convert]::ToBase64String($originalBytes))
     # Use the real per-user state volume, where EFS caused the production second-write failure.
     # These exercise the same Start/Set/Stop APIs used by the unified application UI.
@@ -191,7 +204,11 @@ try{
         }
     }
     $sessionAfterBusy=Read-SessionStateUtf8 -Path $sessionContinuousControl
-    $sessionRecovered=Watch-SessionHeartbeats -Paused $false -Seconds 1.2 -ExpectedProcessId $sessionContinuousId
+    # Heartbeats require one second since the last write and run on 500ms ticks.
+    # Match pause/resume observation time so timer phase and EFS I/O cannot hide the next update.
+    $sessionRecovered=Watch-SessionHeartbeats -Paused $false -Seconds 2.2 -ExpectedProcessId $sessionContinuousId
+    $sessionContention=[ordered]@{ReadTimedOut=$sessionReadTimedOut;WriteTimedOut=$sessionWriteTimedOut;BusySeconds=$sessionBusySeconds;SameWorkerAlive=$sessionBusyAlive;ControlUnchanged=($sessionAfterBusy -eq $sessionResumedControlText);RecoveredSeconds=$sessionRecovered.Seconds;RecoveredUpdates=$sessionRecovered.Updates}
+    Write-Output ('SESSION CONTENTION '+($sessionContention|ConvertTo-Json -Compress))
     Check 'A busy session mutex bounds reader and writer waits, preserves complete JSON and keeps the same worker alive' ($sessionReadTimedOut -and $sessionWriteTimedOut -and $sessionBusySeconds -lt 2 -and $sessionBusyAlive -and $sessionAfterBusy -eq $sessionResumedControlText -and $sessionRecovered.Updates -ge 2)
     # Request a natural stop directly. Do not let Stop-ManagedLibraryWatcher's kill fallback prove success.
     $script:ManagedWatcher.Data.Stop=$true
